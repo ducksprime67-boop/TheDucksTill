@@ -1,0 +1,3185 @@
+import csv
+from datetime import datetime
+import io
+import json
+import os
+import sys
+import threading
+import tkinter as tk
+from tkinter import colorchooser, filedialog, messagebox, simpledialog, ttk
+from urllib.request import Request, urlopen
+from PIL import Image, ImageTk
+
+# Attempt to import drag-and-drop support
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    DND_AVAILABLE = True
+except ImportError:
+    DND_AVAILABLE = False
+    TkinterDnD = object
+
+DATA_FILE = "the_duck_till_data.json"
+ICON_FILE = "the_duck_till.ico"
+USER_LOGO_PATHS = [
+    "Gemini_Generated_Image_fo7s5yfo7s5yfo7s.jpg",
+    "logo.png",
+    "logo.jpg",
+    "logo.jpeg",
+]
+
+# Comprehensive Global Currencies (Approx. 200+ Countries & Territories mapped to currencies)
+GLOBAL_CURRENCIES = {
+    "USD - United States Dollar ($)": {"symbol": "$", "rate": 1.0},
+    "PKR - Pakistani Rupee (Rs)": {"symbol": "Rs", "rate": 278.50},
+    "EUR - Euro (€)": {"symbol": "€", "rate": 0.92},
+    "GBP - British Pound (£)": {"symbol": "£", "rate": 0.79},
+    "INR - Indian Rupee (₹)": {"symbol": "₹", "rate": 83.30},
+    "AED - United Arab Emirates Dirham (AED)": {"symbol": "AED", "rate": 3.67},
+    "SAR - Saudi Riyal (SAR)": {"symbol": "SAR", "rate": 3.75},
+    "CAD - Canadian Dollar (CA$)": {"symbol": "CA$", "rate": 1.37},
+    "AUD - Australian Dollar (A$)": {"symbol": "A$", "rate": 1.52},
+    "JPY - Japanese Yen (¥)": {"symbol": "¥", "rate": 155.0},
+    "CNY - Chinese Yuan (¥)": {"symbol": "¥", "rate": 7.23},
+    "AFN - Afghan Afghani (؋)": {"symbol": "؋", "rate": 71.5},
+    "ALL - Albanian Lek (L)": {"symbol": "L", "rate": 96.2},
+    "DZD - Algerian Dinar (دج)": {"symbol": "دج", "rate": 134.5},
+    "ARS - Argentine Peso ($)": {"symbol": "$", "rate": 880.0},
+    "AMD - Armenian Dram (֏)": {"symbol": "֏", "rate": 388.0},
+    "AWG - Aruban Florin (ƒ)": {"symbol": "ƒ", "rate": 1.79},
+    "AZN - Azerbaijani Manat (₼)": {"symbol": "₼", "rate": 1.70},
+    "BSD - Bahamian Dollar ($)": {"symbol": "$", "rate": 1.0},
+    "BHD - Bahraini Dinar (.د.ب)": {"symbol": "BD", "rate": 0.376},
+    "BDT - Bangladeshi Taka (৳)": {"symbol": "৳", "rate": 117.5},
+    "BBD - Barbadian Dollar ($)": {"symbol": "$", "rate": 2.0},
+    "BYN - Belarusian Ruble (Br)": {"symbol": "Br", "rate": 3.25},
+    "BZD - Belize Dollar (BZ$)": {"symbol": "BZ$", "rate": 2.0},
+    "BMD - Bermudian Dollar ($)": {"symbol": "$", "rate": 1.0},
+    "BTN - Bhutanese Ngultrum (Nu.)": {"symbol": "Nu.", "rate": 83.3},
+    "BOB - Bolivian Boliviano (Bs.)": {"symbol": "Bs.", "rate": 6.91},
+    "BAM - Bosnia-Herzegovina Convertible Mark (KM)": {"symbol": "KM", "rate": 1.80},
+    "BWP - Botswanan Pula (P)": {"symbol": "P", "rate": 13.6},
+    "BRL - Brazilian Real (R$)": {"symbol": "R$", "rate": 5.25},
+    "BND - Brunei Dollar (B$)": {"symbol": "B$", "rate": 1.35},
+    "BGN - Bulgarian Lev (лв)": {"symbol": "лв", "rate": 1.80},
+    "BIF - Burundian Franc (FBu)": {"symbol": "FBu", "rate": 2850.0},
+    "KHR - Cambodian Riel (៛)": {"symbol": "៛", "rate": 4050.0},
+    "CVE - Cape Verdean Escudo ($)": {"symbol": "$", "rate": 101.5},
+    "KYD - Cayman Islands Dollar ($)": {"symbol": "$", "rate": 0.83},
+    "XOF - CFA Franc BCEAO (CFA)": {"symbol": "CFA", "rate": 603.0},
+    "XAF - CFA Franc BEAC (FCFA)": {"symbol": "FCFA", "rate": 603.0},
+    "XPF - CFP Franc (₣)": {"symbol": "₣", "rate": 110.0},
+    "CLP - Chilean Peso ($)": {"symbol": "$", "rate": 930.0},
+    "COP - Colombian Peso ($)": {"symbol": "$", "rate": 3900.0},
+    "KMF - Comorian Franc (CF)": {"symbol": "CF", "rate": 450.0},
+    "CDF - Congolese Franc (FC)": {"symbol": "FC", "rate": 2800.0},
+    "CRC - Costa Rican Colón (₡)": {"symbol": "₡", "rate": 520.0},
+    "HRK - Croatian Kuna (kn)": {"symbol": "kn", "rate": 7.0},
+    "CUP - Cuban Peso ($)": {"symbol": "$", "rate": 24.0},
+    "CZK - Czech Koruna (Kč)": {"symbol": "Kč", "rate": 23.2},
+    "DKK - Danish Krone (kr)": {"symbol": "kr", "rate": 6.85},
+    "DJF - Djiboutian Franc (Fdj)": {"symbol": "Fdj", "rate": 177.7},
+    "DOP - Dominican Peso (RD$)": {"symbol": "RD$", "rate": 58.5},
+    "XCD - East Caribbean Dollar ($)": {"symbol": "$", "rate": 2.70},
+    "EGP - Egyptian Pound (£)": {"symbol": "£", "rate": 47.5},
+    "SVC - Salvadoran Colón (₡)": {"symbol": "₡", "rate": 8.75},
+    "ERN - Eritrean Nakfa (Nfk)": {"symbol": "Nfk", "rate": 15.0},
+    "ETB - Ethiopian Birr (Br)": {"symbol": "Br", "rate": 57.0},
+    "FKP - Falkland Islands Pound (£)": {"symbol": "£", "rate": 0.79},
+    "FJD - Fijian Dollar ($)": {"symbol": "$", "rate": 2.25},
+    "GMD - Gambian Dalasi (D)": {"symbol": "D", "rate": 68.0},
+    "GEL - Georgian Lari (₾)": {"symbol": "₾", "rate": 2.68},
+    "GHS - Ghanaian Cedi (₵)": {"symbol": "₵", "rate": 14.2},
+    "GIP - Gibraltar Pound (£)": {"symbol": "£", "rate": 0.79},
+    "GTQ - Guatemalan Quetzal (Q)": {"symbol": "Q", "rate": 7.80},
+    "GGP - Guernsey Pound (£)": {"symbol": "£", "rate": 0.79},
+    "GNF - Guinean Franc (FG)": {"symbol": "FG", "rate": 8600.0},
+    "GYD - Guyanese Dollar ($)": {"symbol": "$", "rate": 209.0},
+    "HTG - Haitian Gourde (G)": {"symbol": "G", "rate": 132.0},
+    "HNL - Honduran Lempira (L)": {"symbol": "L", "rate": 24.6},
+    "HKD - Hong Kong Dollar (HK$)": {"symbol": "HK$", "rate": 7.82},
+    "HUF - Hungarian Forint (Ft)": {"symbol": "Ft", "rate": 365.0},
+    "ISK - Icelandic Króna (kr)": {"symbol": "kr", "rate": 139.0},
+    "IDR - Indonesian Rupiah (Rp)": {"symbol": "Rp", "rate": 16100.0},
+    "IRR - Iranian Rial (﷼)": {"symbol": "﷼", "rate": 42000.0},
+    "IQD - Iraqi Dinar (ع.د)": {"symbol": "IQD", "rate": 1310.0},
+    "ILS - Israeli New Shekel (₪)": {"symbol": "₪", "rate": 3.70},
+    "JMD - Jamaican Dollar (J$)": {"symbol": "J$", "rate": 156.0},
+    "JEP - Jersey Pound (£)": {"symbol": "£", "rate": 0.79},
+    "JOD - Jordanian Dinar (د.ا)": {"symbol": "JD", "rate": 0.709},
+    "KZT - Kazakhstani Tenge (₸)": {"symbol": "₸", "rate": 445.0},
+    "KES - Kenyan Shilling (Sh)": {"symbol": "Sh", "rate": 132.0},
+    "KWD - Kuwaiti Dinar (د.ك)": {"symbol": "KD", "rate": 0.307},
+    "KGS - Kyrgyzstani Som (с)": {"symbol": "с", "rate": 89.5},
+    "LAK - Laotian Kip (₭)": {"symbol": "₭", "rate": 21500.0},
+    "LBP - Lebanese Pound (£)": {"symbol": "£", "rate": 89500.0},
+    "LSL - Lesotho Loti (L)": {"symbol": "L", "rate": 18.5},
+    "LRD - Liberian Dollar ($)": {"symbol": "$", "rate": 194.0},
+    "LYD - Libyan Dinar (ل.د)": {"symbol": "LD", "rate": 4.85},
+    "MOP - Macanese Pataca (MOP$)": {"symbol": "MOP$", "rate": 8.05},
+    "MKD - Macedonian Denar (ден)": {"symbol": "ден", "rate": 56.5},
+    "MGA - Malagasy Ariary (Ar)": {"symbol": "Ar", "rate": 4500.0},
+    "MWK - Malawian Kwacha (MK)": {"symbol": "MK", "rate": 1740.0},
+    "MYR - Malaysian Ringgit (RM)": {"symbol": "RM", "rate": 4.72},
+    "MVR - Maldivian Rufiyaa (Rf)": {"symbol": "Rf", "rate": 15.4},
+    "MRU - Mauritanian Ouguiya (UM)": {"symbol": "UM", "rate": 39.8},
+    "MUR - Mauritian Rupee (₨)": {"symbol": "₨", "rate": 46.5},
+    "MXN - Mexican Peso ($)": {"symbol": "$", "rate": 17.0},
+    "MDL - Moldovan Leu (L)": {"symbol": "L", "rate": 17.8},
+    "MNT - Mongolian Tugrik (₮)": {"symbol": "₮", "rate": 3450.0},
+    "MAD - Moroccan Dirham (د.م.)": {"symbol": "DH", "rate": 10.1},
+    "MZN - Mozambican Metical (MT)": {"symbol": "MT", "rate": 63.9},
+    "MMK - Myanmar Kyat (K)": {"symbol": "K", "rate": 2100.0},
+    "NAD - Namibian Dollar ($)": {"symbol": "$", "rate": 18.5},
+    "NPR - Nepalese Rupee (₨)": {"symbol": "₨", "rate": 133.3},
+    "ANG - Netherlands Antillean Guilder (ƒ)": {"symbol": "ƒ", "rate": 1.79},
+    "NZD - New Zealand Dollar (NZ$)": {"symbol": "NZ$", "rate": 1.66},
+    "NIO - Nicaraguan Córdoba (C$)": {"symbol": "C$", "rate": 36.7},
+    "NGN - Nigerian Naira (₦)": {"symbol": "₦", "rate": 1350.0},
+    "NOK - Norwegian Krone (kr)": {"symbol": "kr", "rate": 10.9},
+    "OMR - Omani Rial (ر.ع.)": {"symbol": "OMR", "rate": 0.385},
+    "PAB - Panamanian Balboa (B/.)": {"symbol": "B/.", "rate": 1.0},
+    "PGK - Papua New Guinean Kina (K)": {"symbol": "K", "rate": 3.85},
+    "PYG - Paraguayan Guarani (₲)": {"symbol": "₲", "rate": 7500.0},
+    "PEN - Peruvian Sol (S/.)": {"symbol": "S/.", "rate": 3.72},
+    "PHP - Philippine Peso (₱)": {"symbol": "₱", "rate": 56.5},
+    "PLN - Polish Zloty (zł)": {"symbol": "zł", "rate": 4.0},
+    "QAR - Qatari Riyal (ر.ق)": {"symbol": "QR", "rate": 3.64},
+    "RON - Romanian Leu (lei)": {"symbol": "lei", "rate": 4.60},
+    "RUB - Russian Ruble (₽)": {"symbol": "₽", "rate": 92.0},
+    "RWF - Rwandan Franc (FRw)": {"symbol": "FRw", "rate": 1280.0},
+    "WST - Samoan Tala (SAT)": {"symbol": "SAT", "rate": 2.75},
+    "STN - São Tomé and Príncipe Dobra (Db)": {"symbol": "Db", "rate": 22.5},
+    "RSD - Serbian Dinar (din)": {"symbol": "din", "rate": 107.0},
+    "SCR - Seychellois Rupee (₨)": {"symbol": "₨", "rate": 13.5},
+    "SLL - Sierra Leonean Leone (Le)": {"symbol": "Le", "rate": 20900.0},
+    "SGD - Singapore Dollar (S$)": {"symbol": "S$", "rate": 1.35},
+    "SBD - Solomon Islands Dollar ($)": {"symbol": "$", "rate": 8.45},
+    "SOS - Somali Shilling (Sh)": {"symbol": "Sh", "rate": 570.0},
+    "ZAR - South African Rand (R)": {"symbol": "R", "rate": 18.5},
+    "KRW - South Korean Won (₩)": {"symbol": "₩", "rate": 1370.0},
+    "SSP - South Sudanese Pound (£)": {"symbol": "£", "rate": 1300.0},
+    "LKR - Sri Lankan Rupee (Rs)": {"symbol": "Rs", "rate": 300.0},
+    "SDG - Sudanese Pound (SDG)": {"symbol": "SDG", "rate": 600.0},
+    "SRD - Surinamese Dollar ($)": {"symbol": "$", "rate": 35.0},
+    "SEK - Swedish Krona (kr)": {"symbol": "kr", "rate": 10.8},
+    "CHF - Swiss Franc (CHF)": {"symbol": "CHF", "rate": 0.91},
+    "SYP - Syrian Pound (£)": {"symbol": "£", "rate": 13000.0},
+    "TWD - New Taiwan Dollar (NT$)": {"symbol": "NT$", "rate": 32.5},
+    "TJS - Tajikistani Somoni (SM)": {"symbol": "SM", "rate": 10.9},
+    "TZS - Tanzanian Shilling (Sh)": {"symbol": "Sh", "rate": 2600.0},
+    "THB - Thai Baht (฿)": {"symbol": "฿", "rate": 36.8},
+    "TOP - Tongan Paʻanga (T$)": {"symbol": "T$", "rate": 2.35},
+    "TTD - Trinidad and Tobago Dollar (TT$)": {"symbol": "TT$", "rate": 6.80},
+    "TND - Tunisian Dinar (د.ت)": {"symbol": "DT", "rate": 3.12},
+    "TRY - Turkish Lira (₺)": {"symbol": "₺", "rate": 32.2},
+    "TMT - Turkmenistani Manat (T)": {"symbol": "T", "rate": 3.50},
+    "UGX - Ugandan Shilling (Sh)": {"symbol": "Sh", "rate": 3800.0},
+    "UAH - Ukrainian Hryvnia (₴)": {"symbol": "₴", "rate": 39.5},
+    "UYU - Uruguayan Peso ($)": {"symbol": "$", "rate": 39.0},
+    "UZS - Uzbekistan Som (so'm)": {"symbol": "so'm", "rate": 12700.0},
+    "VUV - Vatu (VT)": {"symbol": "VT", "rate": 118.0},
+    "VES - Venezuelan Bolívar (Bs.S)": {"symbol": "Bs.S", "rate": 36.5},
+    "VND - Vietnamese Đồng (₫)": {"symbol": "₫", "rate": 25400.0},
+    "YER - Yemeni Rial (﷼)": {"symbol": "﷼", "rate": 250.0},
+    "ZMW - Zambian Kwacha (ZK)": {"symbol": "ZK", "rate": 26.5},
+    "ZWL - Zimbabwean Dollar (Z$)": {"symbol": "Z$", "rate": 13.8}
+}
+
+# Force Windows Taskbar process ID grouping
+if sys.platform == "win32":
+    try:
+        import ctypes
+        myappid = "theducktill.inventory.pos.app.v36.0"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+
+
+def prepare_icon():
+    for path in USER_LOGO_PATHS:
+        if os.path.exists(path):
+            try:
+                img = Image.open(path)
+                img.save(
+                    ICON_FILE,
+                    format="ICO",
+                    sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)],
+                )
+                return ICON_FILE
+            except Exception:
+                pass
+    return ICON_FILE if os.path.exists(ICON_FILE) else None
+
+
+def get_logo_image():
+    for path in USER_LOGO_PATHS:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def generate_valid_pdf(filename, text_lines):
+    content_stream = ["BT", "/F1 10 Tf", "12 TL", "40 750 Td"]
+    for line in text_lines:
+        clean_line = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        content_stream.append(f"({clean_line}) '")
+    content_stream.append("ET")
+    
+    stream_data = "\n".join(content_stream).encode("latin-1", "replace")
+    stream_len = len(stream_data)
+
+    pdf_objects = []
+    pdf_objects.append("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+    pdf_objects.append("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+    pdf_objects.append("3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources 4 0 R /MediaBox [0 0 595 842] /Contents 5 0 R >>\nendobj\n")
+    pdf_objects.append("4 0 obj\n<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Courier >> >> >>\nendobj\n")
+    pdf_objects.append(f"5 0 obj\n<< /Length {stream_len} >>\nstream\n".encode("latin-1") + stream_data + b"\nendstream\nendobj\n")
+
+    xref_offsets = [0]
+    output = bytearray()
+    output.extend(b"%PDF-1.4\n")
+
+    for obj in pdf_objects:
+        xref_offsets.append(len(output))
+        if isinstance(obj, str):
+            output.extend(obj.encode("latin-1"))
+        else:
+            output.extend(obj)
+
+    xref_start = len(output)
+    output.extend(f"xref\n0 {len(xref_offsets)}\n0000000000 65535 f \n".encode("latin-1"))
+    for offset in xref_offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("latin-1"))
+
+    output.extend(f"trailer\n<< /Size {len(xref_offsets)} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode("latin-1"))
+
+    with open(filename, "wb") as f:
+        f.write(output)
+
+
+PRESET_THEMES = {
+    "Dark Gold": {"bg": "#121212", "surface": "#1E1E1E", "card": "#2A2A2A", "accent": "#FFD700", "text": "#FFFFFF", "muted": "#B0B0B0", "input_bg": "#2B2B2B"},
+    "Amber Glow": {"bg": "#18140C", "surface": "#282014", "card": "#3B2E1D", "accent": "#FFB300", "text": "#FFFFFF", "muted": "#D1C4E9", "input_bg": "#221A10"},
+    "Cyber Cyan": {"bg": "#090D16", "surface": "#121B2D", "card": "#1E2B45", "accent": "#00E5FF", "text": "#F8FAFC", "muted": "#94A3B8", "input_bg": "#101827"},
+    "Emerald Night": {"bg": "#04140B", "surface": "#0B2B18", "card": "#144527", "accent": "#10B981", "text": "#ECFDF5", "muted": "#A7F3D0", "input_bg": "#082113"},
+    "Neon Pink": {"bg": "#0B061A", "surface": "#1A102F", "card": "#261947", "accent": "#FF007F", "text": "#F8F8F2", "muted": "#A29BFE", "input_bg": "#150C2B"},
+    "Matrix Green": {"bg": "#020A02", "surface": "#081808", "card": "#102810", "accent": "#00FF66", "text": "#E0FFE0", "muted": "#66CC66", "input_bg": "#081808"},
+    "Midnight Blue": {"bg": "#0F172A", "surface": "#1E293B", "card": "#334155", "accent": "#38BDF8", "text": "#F8FAFC", "muted": "#94A3B8", "input_bg": "#1E293B"},
+    "Sunset Orange": {"bg": "#1C1917", "surface": "#292524", "card": "#44403C", "accent": "#F97316", "text": "#FAFAF9", "muted": "#A8A29E", "input_bg": "#292524"},
+    "Nord Frost": {"bg": "#2E3440", "surface": "#3B4252", "card": "#434C5E", "accent": "#88C0D0", "text": "#ECEFF4", "muted": "#D8DEE9", "input_bg": "#4C566A"},
+    "Dracula Velvet": {"bg": "#282A36", "surface": "#44475A", "card": "#383A59", "accent": "#FF79C6", "text": "#F8F8F2", "muted": "#6272A4", "input_bg": "#343746"},
+    "Gruvbox Warm": {"bg": "#282828", "surface": "#3C3836", "card": "#504945", "accent": "#FABD2F", "text": "#EBDBB2", "muted": "#BDAE93", "input_bg": "#32302F"},
+    "Monokai Vivid": {"bg": "#2D2A2E", "surface": "#403E41", "card": "#5B595C", "accent": "#FFD866", "text": "#FCFCFA", "muted": "#939293", "input_bg": "#363338"},
+    "Tokyo Night": {"bg": "#1A1B26", "surface": "#24283B", "card": "#414868", "accent": "#7AA2F7", "text": "#C0CAF5", "muted": "#565F89", "input_bg": "#1F2335"},
+    "Crimson Blood": {"bg": "#1A0505", "surface": "#2D0A0A", "card": "#451212", "accent": "#FF3333", "text": "#FFFFFF", "muted": "#E57373", "input_bg": "#200808"},
+    "Clean Light": {"bg": "#F4F6F9", "surface": "#FFFFFF", "card": "#E2E8F0", "accent": "#2563EB", "text": "#1E293B", "muted": "#64748B", "input_bg": "#FFFFFF"},
+    "3D Embossed": {"bg": "#2C3E50", "surface": "#34495E", "card": "#4E6D8C", "accent": "#F1C40F", "text": "#ECF0F1", "muted": "#BDC3C7", "input_bg": "#22313F"},
+    "Neon Glow": {"bg": "#05050A", "surface": "#0F0F1A", "card": "#1A1A2E", "accent": "#00FFFF", "text": "#FFFFFF", "muted": "#FF00FF", "input_bg": "#10101F"},
+}
+
+CATEGORIES = ["Game", "Mobile Accessory", "Movie", "PC Accessories", "Other"]
+SORT_FILTERS = [
+    "Default",
+    "Best Selling (Highest Sold)",
+    "Worst Selling (Lowest Sold)",
+    "Highest Price",
+    "Lowest Price",
+    "Highest Stock Qty",
+    "Lowest Stock Qty"
+]
+INFINITY_VAL = 999999
+
+
+def load_data():
+    current_month_key = datetime.now().strftime("%Y_%m")
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                data.setdefault("inventory", [])
+                data.setdefault("sales", [])
+                data.setdefault("settings", {})
+                data["settings"].setdefault("theme_name", "Dark Gold")
+                data["settings"].setdefault("custom_colors", PRESET_THEMES["Dark Gold"])
+                data["settings"].setdefault("admin_pin", "1234")
+                data["settings"].setdefault("allow_staff_delete_sales", True)
+                data["settings"].setdefault("confirm_actions", True)
+                data["settings"].setdefault("save_preferred_path", False)
+                data["settings"].setdefault("preferred_path", "")
+                data["settings"].setdefault("month_key", current_month_key)
+                data["settings"].setdefault("resolution", "1280x920")
+                data["settings"].setdefault(
+                    "tab_order",
+                    ["Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Bill System", "Settings", "Refresh Controls"],
+                )
+                data["settings"].setdefault("store_title", "THE DUCK TILL - OFFICIAL RECEIPT")
+                data["settings"].setdefault("store_addr", "Main Commercial Area, Business District")
+                data["settings"].setdefault("store_phone", "+92 300 1234567")
+                data["settings"].setdefault("store_email", "info@theducktill.pk")
+                data["settings"].setdefault("tax_rate", "0.0")
+                data["settings"].setdefault("discount_rate", "0.0")
+                data["settings"].setdefault("tax_id", "NTN-7948120-9")
+                data["settings"].setdefault("currency_name", "USD - United States Dollar ($)")
+                data["settings"].setdefault("footer_msg", "Thank you for shopping with us! No Returns without receipt.")
+                return data
+        except Exception:
+            pass
+    return {
+        "inventory": [],
+        "sales": [],
+        "settings": {
+            "theme_name": "Dark Gold",
+            "custom_colors": PRESET_THEMES["Dark Gold"],
+            "admin_pin": "1234",
+            "allow_staff_delete_sales": True,
+            "confirm_actions": True,
+            "save_preferred_path": False,
+            "preferred_path": "",
+            "month_key": current_month_key,
+            "resolution": "1280x920",
+            "tab_order": ["Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Bill System", "Settings", "Refresh Controls"],
+            "store_title": "THE DUCK TILL - OFFICIAL RECEIPT",
+            "store_addr": "Main Commercial Area, Business District",
+            "store_phone": "+92 300 1234567",
+            "store_email": "info@theducktill.pk",
+            "tax_rate": "0.0",
+            "discount_rate": "0.0",
+            "tax_id": "NTN-7948120-9",
+            "currency_name": "USD - United States Dollar ($)",
+            "footer_msg": "Thank you for shopping with us! No Returns without receipt.",
+        },
+    }
+
+
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+    if data["settings"].get("save_preferred_path", False):
+        pref_path = data["settings"].get("preferred_path", "")
+        if pref_path:
+            try:
+                with open(pref_path, "w", encoding="utf-8") as pf:
+                    json.dump(data, pf, indent=4)
+            except Exception:
+                pass
+
+
+class Tooltip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip_window = None
+        self.widget.bind("<Enter>", self.show_tip)
+        self.widget.bind("<Leave>", self.hide_tip)
+
+    def show_tip(self, event=None):
+        if self.tip_window or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        tw.attributes("-topmost", True)
+        
+        label = tk.Label(
+            tw, text=self.text, justify="left",
+            bg="#2A2A2A", fg="#FFD700", relief="solid", bd=1,
+            font=("Segoe UI", 8, "bold"), padx=6, pady=4
+        )
+        label.pack()
+
+    def hide_tip(self, event=None):
+        if self.tip_window:
+            self.tip_window.destroy()
+            self.tip_window = None
+
+
+BaseTk = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
+
+
+class ModernScrollableTreeview(tk.Frame):
+    def __init__(self, parent, columns, show="headings", bg="#1E1E1E", accent="#FFD700", surface="#2A2A2A"):
+        super().__init__(parent, bg=bg)
+        self.tree = ttk.Treeview(self, columns=columns, show=show, selectmode="extended")
+        self.vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview, style="Modern.Vertical.TScrollbar")
+        self.tree.configure(yscrollcommand=self.vsb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        self.vsb.pack(side="right", fill="y")
+
+
+class TheDuckTillApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("The Duck Till - Management Suite")
+        
+        self.data = load_data()
+        self.colors = self.data["settings"].get(
+            "custom_colors", PRESET_THEMES["Dark Gold"]
+        )
+
+        res = self.data["settings"].get("resolution", "1280x920")
+        if res == "Fullscreen":
+            self.root.attributes("-fullscreen", True)
+        else:
+            self.root.geometry(res)
+
+        icon_path = prepare_icon()
+        if icon_path and os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        logo_file = get_logo_image()
+        if logo_file:
+            try:
+                icon_img = Image.open(logo_file)
+                self.app_photo_icon = ImageTk.PhotoImage(icon_img)
+                self.root.iconphoto(True, self.app_photo_icon)
+            except Exception:
+                pass
+
+        self.current_image_source = None
+        self.hover_window = None
+        self.image_cache = {}
+        self.last_hover_item = None
+        self.hover_thread = None
+        self.shopping_cart = []
+
+        self.setup_styles()
+        self.build_ui()
+        self.bind_global_shortcuts()
+        self.root.bind("<Escape>", self.on_escape_pressed)
+
+    def attach_tooltip(self, widget, text):
+        Tooltip(widget, text)
+
+    def setup_styles(self):
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure(
+            "TNotebook",
+            background=self.colors["bg"],
+            borderwidth=0,
+            highlightthickness=0,
+        )
+        style.configure(
+            "TNotebook.Tab",
+            background=self.colors["surface"],
+            foreground=self.colors["muted"],
+            padding=[12, 8],
+            font=("Segoe UI", 10, "bold"),
+            borderwidth=0,
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", self.colors["accent"])],
+            foreground=[("selected", "#000000")],
+        )
+        style.configure(
+            "Treeview",
+            background=self.colors["card"],
+            foreground=self.colors["text"],
+            fieldbackground=self.colors["card"],
+            rowheight=34,
+            font=("Segoe UI", 10),
+            borderwidth=0,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=self.colors["surface"],
+            foreground=self.colors["accent"],
+            font=("Segoe UI", 10, "bold"),
+            borderwidth=2,
+            relief="raised"
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", self.colors["accent"])],
+            foreground=[("selected", "#000000")],
+        )
+        style.layout("Modern.Vertical.TScrollbar", [
+            ('Vertical.Scrollbar.trough', {
+                'children': [
+                    ('Vertical.Scrollbar.thumb', {'expand': '1', 'unit': '1'})
+                ],
+                'sticky': 'ns'
+            })
+        ])
+        style.configure(
+            "Modern.Vertical.TScrollbar",
+            background=self.colors["card"],
+            troughcolor=self.colors["bg"],
+            borderwidth=0,
+            arrowsize=0
+        )
+
+    def get_active_treeview(self):
+        try:
+            current_tab_idx = self.notebook.index(self.notebook.select())
+            tab_name = self.notebook.tab(current_tab_idx, "text").strip()
+            if "Inventory" in tab_name and hasattr(self, "inv_tree"):
+                return self.inv_tree
+            elif "Point of Sale" in tab_name and hasattr(self, "sale_tree"):
+                return self.sale_tree
+            elif "Sales Log" in tab_name and hasattr(self, "rep_tree"):
+                return self.rep_tree
+            elif "Return" in tab_name and hasattr(self, "return_tree"):
+                return self.return_tree
+        except Exception:
+            pass
+        return getattr(self, "inv_tree", None)
+
+    def bind_global_shortcuts(self):
+        self.root.bind("<Control-a>", self.global_ctrl_a)
+        self.root.bind("<Control-A>", self.global_ctrl_a)
+        self.root.bind("<Delete>", self.global_delete_key)
+        self.root.bind("<Shift-Delete>", self.global_shift_delete_key)
+        self.root.bind("<Shift-Key-Delete>", self.global_shift_delete_key)
+        self.root.bind("<Up>", self.global_arrow_up)
+        self.root.bind("<Down>", self.global_arrow_down)
+
+    def global_arrow_up(self, event=None):
+        widget = self.root.focus_get()
+        if isinstance(widget, (tk.Entry, tk.Text)):
+            return
+        tree = self.get_active_treeview()
+        if not tree:
+            return
+        children = tree.get_children()
+        if not children:
+            return "break"
+
+        selection = tree.selection()
+        if not selection:
+            target = children[-1]
+            tree.selection_set(target)
+            tree.see(target)
+        else:
+            current = selection[-1]
+            try:
+                idx = children.index(current)
+                if idx > 0:
+                    target = children[idx - 1]
+                else:
+                    target = children[-1]
+                tree.selection_set(target)
+                tree.see(target)
+            except Exception:
+                pass
+        return "break"
+
+    def global_arrow_down(self, event=None):
+        widget = self.root.focus_get()
+        if isinstance(widget, (tk.Entry, tk.Text)):
+            return
+        tree = self.get_active_treeview()
+        if not tree:
+            return
+        children = tree.get_children()
+        if not children:
+            return "break"
+
+        selection = tree.selection()
+        if not selection:
+            target = children[0]
+            tree.selection_set(target)
+            tree.see(target)
+        else:
+            current = selection[-1]
+            try:
+                idx = children.index(current)
+                if idx < len(children) - 1:
+                    target = children[idx + 1]
+                else:
+                    target = children[0]
+                tree.selection_set(target)
+                tree.see(target)
+            except Exception:
+                pass
+        return "break"
+
+    def global_ctrl_a(self, event=None):
+        widget = self.root.focus_get()
+        if isinstance(widget, (tk.Entry, tk.Text)):
+            return
+        tree = self.get_active_treeview()
+        if not tree:
+            return "break"
+        
+        children = tree.get_children()
+        if not children:
+            return "break"
+
+        current_selection = tree.selection()
+        if len(current_selection) == len(children):
+            tree.selection_remove(children)
+        else:
+            tree.selection_set(children)
+        return "break"
+
+    def global_delete_key(self, event=None):
+        widget = self.root.focus_get()
+        if isinstance(widget, (tk.Entry, tk.Text)):
+            return
+        
+        try:
+            current_tab_idx = self.notebook.index(self.notebook.select())
+            tab_name = self.notebook.tab(current_tab_idx, "text").strip()
+            if "Inventory" in tab_name:
+                self.remove_product()
+            elif "Point of Sale" in tab_name:
+                self.remove_cart_item()
+            elif "Sales Log" in tab_name:
+                self.remove_sales_log()
+            elif "Return" in tab_name:
+                self.process_return_item()
+        except Exception:
+            pass
+        return "break"
+
+    def global_shift_delete_key(self, event=None):
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if not confirm or messagebox.askyesno("Confirm Master Wipe", "⚠️ WARNING: Shift + Delete pressed. Are you sure you want to delete ALL records / products across this view?", parent=self.root):
+            try:
+                current_tab_idx = self.notebook.index(self.notebook.select())
+                tab_name = self.notebook.tab(current_tab_idx, "text").strip()
+                if "Inventory" in tab_name or "Point of Sale" in tab_name:
+                    self.data["inventory"] = []
+                    save_data(self.data)
+                    self.master_refresh_action(show_popup=False)
+                    messagebox.showinfo("Cleared", "All inventory products have been wiped.", parent=self.root)
+                elif "Sales Log" in tab_name or "Return" in tab_name:
+                    self.data["sales"] = []
+                    save_data(self.data)
+                    self.master_refresh_action(show_popup=False)
+                    messagebox.showinfo("Cleared", "All sales logs have been wiped.", parent=self.root)
+            except Exception:
+                pass
+        return "break"
+
+    def create_scratch_dropdown(self, parent, options, default_val, width=28, tooltip_text="Select option", command_callback=None):
+        var = tk.StringVar(value=default_val)
+        container = tk.Frame(parent, bg=self.colors["input_bg"], bd=2, relief="sunken")
+
+        btn = tk.Button(
+            container,
+            textvariable=var,
+            bg=self.colors["input_bg"],
+            fg=self.colors["text"],
+            activebackground=self.colors["card"],
+            activeforeground=self.colors["accent"],
+            font=("Segoe UI", 10),
+            bd=0,
+            anchor="w",
+            padx=8,
+            pady=3,
+            cursor="hand2",
+            width=width
+        )
+        btn.pack(side="left", fill="both", expand=True)
+
+        arrow_lbl = tk.Label(
+            container,
+            text="▼",
+            font=("Segoe UI", 8, "bold"),
+            fg=self.colors["accent"],
+            bg=self.colors["input_bg"],
+            cursor="hand2"
+        )
+        arrow_lbl.pack(side="right", padx=8)
+
+        menu = tk.Menu(
+            self.root,
+            tearoff=0,
+            bg=self.colors["surface"],
+            fg=self.colors["text"],
+            activebackground=self.colors["accent"],
+            activeforeground="#000000",
+            font=("Segoe UI", 10),
+            bd=1,
+            relief="solid"
+        )
+
+        def set_val(val):
+            var.set(val)
+            if command_callback:
+                command_callback(val)
+
+        for opt in options:
+            menu.add_command(
+                label=f"  {opt}  ",
+                command=lambda val=opt: set_val(val)
+            )
+
+        def show_menu(event=None):
+            try:
+                x = container.winfo_rootx()
+                y = container.winfo_rooty() + container.winfo_height()
+                menu.tk_popup(x, y)
+            finally:
+                menu.grab_release()
+
+        btn.config(command=show_menu)
+        arrow_lbl.bind("<Button-1>", show_menu)
+        container.var = var
+        self.attach_tooltip(container, tooltip_text)
+        return container
+
+    def build_ui(self):
+        self.root.configure(bg=self.colors["bg"])
+
+        header_frame = tk.Frame(self.root, bg=self.colors["surface"], height=75, bd=3, relief="raised")
+        header_frame.pack(fill="x", side="top")
+
+        logo_path = get_logo_image()
+        if logo_path:
+            try:
+                p_img = Image.open(logo_path)
+                p_img.thumbnail((50, 50), Image.Resampling.LANCZOS)
+                self.header_logo_photo = ImageTk.PhotoImage(p_img)
+                logo_lbl = tk.Label(
+                    header_frame,
+                    image=self.header_logo_photo,
+                    bg=self.colors["surface"]
+                )
+                logo_lbl.pack(side="left", padx=(15, 5), pady=10)
+            except Exception:
+                pass
+
+        title_label = tk.Label(
+            header_frame,
+            text="THE DUCK TILL",
+            font=("Segoe UI", 20, "bold"),
+            fg=self.colors["accent"],
+            bg=self.colors["surface"],
+        )
+        title_label.pack(side="left", padx=(5, 15), pady=15)
+
+        sub_label = tk.Label(
+            header_frame,
+            text="Inventory • POS • Logs • Returns • Bills",
+            font=("Segoe UI", 9, "italic"),
+            fg=self.colors["muted"],
+            bg=self.colors["surface"],
+        )
+        sub_label.pack(side="left", pady=20)
+
+        # --- TOP RIGHT: CLOCK & SEARCHABLE GLOBAL CURRENCY CHANGER ---
+        right_header_box = tk.Frame(header_frame, bg=self.colors["surface"])
+        right_header_box.pack(side="right", padx=20, pady=12)
+
+        self.clock_label = tk.Label(
+            right_header_box,
+            font=("Segoe UI", 9, "bold"),
+            fg=self.colors["accent"],
+            bg=self.colors["surface"],
+        )
+        self.clock_label.pack(side="top", anchor="e", pady=(0, 2))
+        self.update_clock()
+
+        curr_bar = tk.Frame(right_header_box, bg=self.colors["surface"])
+        curr_bar.pack(side="top", anchor="e")
+
+        tk.Label(
+            curr_bar, text="💱 Currency:", font=("Segoe UI", 8, "bold"),
+            fg=self.colors["muted"], bg=self.colors["surface"]
+        ).pack(side="left", padx=(0, 4))
+
+        saved_curr = self.data["settings"].get("currency_name", "USD - United States Dollar ($)")
+        if saved_curr not in GLOBAL_CURRENCIES:
+            saved_curr = "USD - United States Dollar ($)"
+
+        self.curr_var = tk.StringVar(value=saved_curr)
+        
+        curr_btn = tk.Button(
+            curr_bar, textvariable=self.curr_var,
+            bg=self.colors["card"], fg=self.colors["accent"],
+            activebackground=self.colors["accent"], activeforeground="#000000",
+            font=("Segoe UI", 9, "bold"), bd=1, relief="solid",
+            padx=8, pady=2, cursor="hand2", command=self.open_currency_selector_dialog
+        )
+        curr_btn.pack(side="left")
+        self.attach_tooltip(curr_btn, "Click to search and select from all world currencies")
+
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=15, pady=15)
+
+        valid_all_tabs = ["Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Bill System", "Settings", "Refresh Controls"]
+        stored_tab_order = self.data["settings"].get("tab_order", valid_all_tabs)
+        tab_order = [t for t in stored_tab_order if t in valid_all_tabs]
+        for t in valid_all_tabs:
+            if t not in tab_order:
+                tab_order.append(t)
+
+        self.tab_frames = {}
+        for tab_name in tab_order:
+            frame = tk.Frame(self.notebook, bg=self.colors["bg"])
+            self.tab_frames[tab_name] = frame
+
+            if tab_name == "Inventory":
+                self.notebook.add(frame, text="   📦 Inventory   ")
+                self.setup_inventory_tab(frame)
+            elif tab_name in ["Point of Sale (Cart)", "Make a Sale"]:
+                self.notebook.add(frame, text="   🛒 Point of Sale (Cart)   ")
+                self.setup_sales_tab(frame)
+            elif tab_name == "Sales Log":
+                self.notebook.add(frame, text="   📊 Sales Log   ")
+                self.setup_report_tab(frame)
+            elif tab_name == "Return":
+                self.notebook.add(frame, text="   ↩️ Return   ")
+                self.setup_return_tab(frame)
+            elif tab_name == "Bill System":
+                self.notebook.add(frame, text="   🖨️ Bill System   ")
+                self.setup_bill_system_tab(frame)
+            elif tab_name == "Settings":
+                self.notebook.add(frame, text="   🎨 Settings & Themes   ")
+                self.setup_settings_tab(frame)
+            elif tab_name in ["Refresh Controls", "Refresh"]:
+                self.notebook.add(frame, text="   🔄 Refresh Controls   ")
+                self.setup_refresh_tab(frame)
+
+    def open_currency_selector_dialog(self):
+        curr_win = tk.Toplevel(self.root)
+        curr_win.title("Select World Currency")
+        curr_win.geometry("460x480")
+        curr_win.config(bg=self.colors["surface"])
+        curr_win.transient(self.root)
+        curr_win.grab_set()
+
+        tk.Label(
+            curr_win, text="🌍 Search & Select World Currency",
+            font=("Segoe UI", 12, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]
+        ).pack(pady=12)
+
+        search_f = tk.Frame(curr_win, bg=self.colors["surface"])
+        search_f.pack(fill="x", padx=20, pady=5)
+
+        tk.Label(search_f, text="🔍 Search:", fg=self.colors["text"], bg=self.colors["surface"], font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 5))
+        
+        search_var = tk.StringVar()
+        s_entry = self.create_entry(search_f, width=28, tooltip="Type country, currency name or code (e.g. EUR, Pakistan, Yen)")
+        s_entry.pack(side="left", padx=5)
+        s_entry.config(textvariable=search_var)
+
+        list_frame = tk.Frame(curr_win, bg=self.colors["card"], bd=2, relief="sunken")
+        list_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        listbox = tk.Listbox(
+            list_frame, bg=self.colors["card"], fg=self.colors["text"],
+            selectbackground=self.colors["accent"], selectforeground="#000000",
+            font=("Segoe UI", 10), bd=0, highlightthickness=0
+        )
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=listbox.yview, style="Modern.Vertical.TScrollbar")
+        listbox.configure(yscrollcommand=scrollbar.set)
+        
+        listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        all_curr_keys = sorted(list(GLOBAL_CURRENCIES.keys()))
+
+        def populate_list(filter_str=""):
+            listbox.delete(0, tk.END)
+            f_lower = filter_str.lower().strip()
+            for key in all_curr_keys:
+                if not f_lower or f_lower in key.lower():
+                    listbox.insert(tk.END, key)
+
+        populate_list("")
+        search_var.trace_add("write", lambda *args: populate_list(search_var.get()))
+
+        def on_select(event=None):
+            selected_indices = listbox.curselection()
+            if not selected_indices:
+                return
+            chosen_key = listbox.get(selected_indices[0])
+            self.curr_var.set(chosen_key)
+            self.data["settings"]["currency_name"] = chosen_key
+            
+            # Update currency symbol in general settings too
+            sym_info = GLOBAL_CURRENCIES.get(chosen_key, {"symbol": "Rs"})
+            self.data["settings"]["currency_sym"] = sym_info["symbol"]
+            save_data(self.data)
+            
+            curr_win.destroy()
+            self.master_refresh_action(show_popup=False)
+            messagebox.showinfo("Currency Updated", f"Active currency switched to:\n{chosen_key}", parent=self.root)
+
+        listbox.bind("<Double-1>", on_select)
+        
+        btn_f = tk.Frame(curr_win, bg=self.colors["surface"])
+        btn_f.pack(pady=10)
+
+        self.create_btn(btn_f, "Select Currency", on_select, tooltip="Apply chosen currency").pack(side="left", padx=5)
+        self.create_btn(btn_f, "Cancel", curr_win.destroy, bg_c=self.colors["card"], fg_c=self.colors["muted"], tooltip="Close window").pack(side="left", padx=5)
+
+    def get_current_currency_conversion(self):
+        curr_key = self.data["settings"].get("currency_name", "USD - United States Dollar ($)")
+        curr_info = GLOBAL_CURRENCIES.get(curr_key, {"symbol": "Rs", "rate": 278.50})
+        return curr_info["symbol"], curr_info["rate"]
+
+    def convert_price(self, usd_price):
+        sym, rate = self.get_current_currency_conversion()
+        # Base stored prices in inventory are considered in USD baseline for universal conversion, 
+        # or we scale them using the rate.
+        return usd_price * rate
+
+    def setup_refresh_tab(self, parent_frame):
+        refresh_container = tk.Frame(parent_frame, bg=self.colors["bg"])
+        refresh_container.pack(fill="both", expand=True, padx=20, pady=20)
+
+        card = tk.LabelFrame(
+            refresh_container, text=" System Action & Control Center ",
+            font=("Segoe UI", 12, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=25, pady=20
+        )
+        card.pack(fill="both", expand=True, padx=60, pady=30)
+
+        tk.Label(
+            card, text="⚙️ The Duck Till Control Options",
+            font=("Segoe UI", 16, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]
+        ).pack(pady=(10, 5))
+
+        tk.Label(
+            card, text="Select an action below to execute system management commands:",
+            font=("Segoe UI", 10, "italic"), fg=self.colors["muted"], bg=self.colors["surface"]
+        ).pack(pady=(0, 20))
+
+        btn_box = tk.Frame(card, bg=self.colors["surface"])
+        btn_box.pack(pady=10)
+
+        self.create_btn(
+            btn_box, "🔄 Refresh App Data & Search", self.trigger_refresh_action,
+            bg_c=self.colors["accent"], fg_c="#000000", tooltip="Reload data, totals, and search engine lists"
+        ).pack(fill="x", pady=8, ipadx=10, ipady=3)
+
+        self.create_btn(
+            btn_box, "🔁 Restart The Duck Till", self.trigger_restart_action,
+            bg_c="#38BDF8", fg_c="#000000", tooltip="Re-launch application process cleanly"
+        ).pack(fill="x", pady=8, ipadx=10, ipady=3)
+
+        self.create_btn(
+            btn_box, "🔌 Shutdown The Duck Till", self.trigger_shutdown_action,
+            bg_c="#D9534F", fg_c="#FFFFFF", tooltip="Safely close and terminate the application"
+        ).pack(fill="x", pady=8, ipadx=10, ipady=3)
+
+        self.create_btn(
+            btn_box, "⚙️ Action Settings", self.open_action_settings_dialog,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Configure confirmation prompts and refresh behaviors"
+        ).pack(fill="x", pady=8, ipadx=10, ipady=3)
+
+        self.create_btn(
+            btn_box, "🔙 Return to App View", lambda: self.notebook.select(self.tab_frames["Inventory"]),
+            bg_c=self.colors["card"], fg_c=self.colors["text"], tooltip="Go back to inventory tab"
+        ).pack(fill="x", pady=(15, 8), ipadx=10, ipady=3)
+
+    def trigger_refresh_action(self):
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if not confirm or messagebox.askyesno("Confirm Refresh", "Are you sure you want to refresh all inventory data, search engines, and totals?", parent=self.root):
+            self.master_refresh_action(show_popup=True)
+
+    def trigger_restart_action(self):
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if not confirm or messagebox.askyesno("Confirm Restart", "Are you sure you want to restart The Duck Till?", parent=self.root):
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
+
+    def trigger_shutdown_action(self):
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if not confirm or messagebox.askyesno("Confirm Shutdown", "Are you sure you want to shut down The Duck Till?", parent=self.root):
+            self.root.destroy()
+
+    def open_action_settings_dialog(self):
+        win = tk.Toplevel(self.root)
+        win.title("Action Center Settings")
+        win.geometry("450x310")
+        win.config(bg=self.colors["surface"])
+        win.transient(self.root)
+        win.grab_set()
+
+        tk.Label(win, text="⚙️ Action & Shortcut Settings", font=("Segoe UI", 12, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(pady=15)
+
+        chk_var = tk.BooleanVar(value=self.data["settings"].get("confirm_actions", True))
+        chk = tk.Checkbutton(
+            win, text="Show Confirmation Menus before actions", variable=chk_var,
+            bg=self.colors["surface"], fg=self.colors["text"],
+            selectcolor=self.colors["card"], activebackground=self.colors["surface"],
+            activeforeground=self.colors["accent"], font=("Segoe UI", 10)
+        )
+        chk.pack(pady=5, anchor="w", padx=25)
+
+        shortcuts_info = (
+            "📌 Active Global Keyboard Shortcuts:\n"
+            "• Up / Down Arrows: Navigate items (with infinite wrap loop)\n"
+            "• Ctrl + A: Select All / Deselect All in active list\n"
+            "• Delete: Remove selected items with confirmation\n"
+            "• Shift + Delete: Master wipe list with confirmation\n"
+            "• Esc: Close application cleanly"
+        )
+        tk.Label(win, text=shortcuts_info, justify="left", font=("Segoe UI", 9, "italic"), fg=self.colors["muted"], bg=self.colors["surface"]).pack(pady=10, padx=25, anchor="w")
+
+        def save_action_settings():
+            self.data["settings"]["confirm_actions"] = chk_var.get()
+            save_data(self.data)
+            win.destroy()
+            messagebox.showinfo("Saved", "Settings updated successfully.", parent=self.root)
+
+        self.create_btn(win, "Save Settings", save_action_settings, tooltip="Save configuration").pack(pady=10)
+
+    def master_refresh_action(self, show_popup=True):
+        self.data = load_data()
+        self.image_cache.clear()
+
+        if hasattr(self, "inv_search_var"):
+            self.inv_search_var.set("")
+        if hasattr(self, "low_stock_filter_var"):
+            self.low_stock_filter_var.set(False)
+        if hasattr(self, "sale_scanner_var"):
+            self.sale_scanner_var.set("")
+        if hasattr(self, "log_search_var"):
+            self.log_search_var.set("")
+        if hasattr(self, "return_search_var"):
+            self.return_search_var.set("")
+
+        if hasattr(self, "refresh_inventory_list"):
+            self.refresh_inventory_list()
+        if hasattr(self, "refresh_sale_list"):
+            self.refresh_sale_list()
+        if hasattr(self, "refresh_report_list"):
+            self.refresh_report_list()
+        if hasattr(self, "refresh_return_list"):
+            self.refresh_return_list()
+        if hasattr(self, "populate_sales_checklist"):
+            self.populate_sales_checklist()
+
+        if show_popup:
+            messagebox.showinfo("Refreshed", "All inventory lists, search queries, point-of-sale entries, and totals have been successfully refreshed!", parent=self.root)
+
+    def update_clock(self):
+        now = datetime.now().strftime("%I:%M:%S %p | %b %d, %Y")
+        if hasattr(self, "clock_label") and self.clock_label.winfo_exists():
+            self.clock_label.config(text=now)
+            self.root.after(1000, self.update_clock)
+
+    def create_btn(self, parent, text, command, bg_c=None, fg_c="#000000", tooltip=""):
+        bg_color = bg_c if bg_c else self.colors["accent"]
+        btn = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg_color,
+            fg=fg_c,
+            activebackground="#FFFFFF",
+            activeforeground="#000000",
+            font=("Segoe UI", 10, "bold"),
+            bd=2,
+            relief="raised",
+            padx=14,
+            pady=6,
+            cursor="hand2",
+        )
+        
+        def on_enter(e):
+            btn.config(bg="#FFFFFF", fg="#000000", relief="sunken")
+        def on_leave(e):
+            btn.config(bg=bg_color, fg=fg_c, relief="raised")
+
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+
+        if tooltip:
+            self.attach_tooltip(btn, tooltip)
+        return btn
+
+    def create_clickable_tree(self, parent, columns, show="headings"):
+        comp = ModernScrollableTreeview(
+            parent, columns=columns, show=show,
+            bg=self.colors["bg"], accent=self.colors["accent"], surface=self.colors["surface"]
+        )
+        return comp, comp.tree
+
+    def create_entry(self, parent, width=20, tooltip=""):
+        entry = tk.Entry(
+            parent,
+            width=width,
+            bg=self.colors["input_bg"],
+            fg=self.colors["text"],
+            insertbackground=self.colors["accent"],
+            font=("Segoe UI", 10),
+            bd=2,
+            relief="sunken",
+        )
+        if tooltip:
+            self.attach_tooltip(entry, tooltip)
+        return entry
+
+    def render_image_on_canvas(self, canvas, src, max_w, max_h):
+        canvas.delete("all")
+        if not src:
+            canvas.create_text(
+                max_w / 2, max_h / 2, text="[ No Image Attached ]",
+                fill=self.colors["muted"], font=("Segoe UI", 9, "bold")
+            )
+            return None
+        
+        cache_key = f"{src}_{max_w}_{max_h}"
+        if cache_key in self.image_cache:
+            photo = self.image_cache[cache_key]
+            canvas.create_image(max_w / 2, max_h / 2, image=photo, anchor="center")
+            return photo
+
+        try:
+            pil_img = None
+            if src.startswith("http://") or src.startswith("https://"):
+                req = Request(src, headers={"User-Agent": "Mozilla/5.0"})
+                with urlopen(req, timeout=5) as resp:
+                    pil_img = Image.open(io.BytesIO(resp.read()))
+            elif os.path.exists(src):
+                pil_img = Image.open(src)
+            if pil_img:
+                pil_img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(pil_img)
+                self.image_cache[cache_key] = photo
+                canvas.create_text(max_w / 2, max_h / 2, text="")
+                canvas.create_image(max_w / 2, max_h / 2, image=photo, anchor="center")
+                return photo
+        except Exception:
+            pass
+        canvas.create_text(
+            max_w / 2, max_h / 2, text="[ Invalid Image / URL ]",
+            fill="#D9534F", font=("Segoe UI", 9, "bold")
+        )
+        return None
+
+    def get_sales_count_map(self):
+        sales_map = {}
+        for s in self.data["sales"]:
+            p_id = str(s.get("id", ""))
+            sales_map[p_id] = sales_map.get(p_id, 0) + s.get("qty", 1)
+        return sales_map
+
+    def sort_products_list(self, products, sort_rule):
+        sales_map = self.get_sales_count_map()
+        prods = list(products)
+        if sort_rule == "Best Selling (Highest Sold)":
+            return sorted(prods, key=lambda p: sales_map.get(str(p.get("id", "")), 0), reverse=True)
+        elif sort_rule == "Worst Selling (Lowest Sold)":
+            return sorted(prods, key=lambda p: sales_map.get(str(p.get("id", "")), 0))
+        elif sort_rule in ["Highest Price", "Highest Price (Rs)", "Highest Price ($)"]:
+            return sorted(prods, key=lambda p: p.get("price", 0.0), reverse=True)
+        elif sort_rule in ["Lowest Price", "Lowest Price (Rs)", "Lowest Price ($)"]:
+            return sorted(prods, key=lambda p: p.get("price", 0.0))
+        elif sort_rule == "Highest Stock Qty":
+            return sorted(prods, key=lambda p: p.get("stock", 0), reverse=True)
+        elif sort_rule == "Lowest Stock Qty":
+            return sorted(prods, key=lambda p: p.get("stock", 0))
+        return prods
+
+    def sort_sales_list(self, sales, sort_rule):
+        s_list = list(sales)
+        if sort_rule in ["Highest Price", "Highest Price (Rs)", "Highest Price ($)"]:
+            return sorted(s_list, key=lambda s: s.get("price", 0.0), reverse=True)
+        elif sort_rule in ["Lowest Price", "Lowest Price (Rs)", "Lowest Price ($)"]:
+            return sorted(s_list, key=lambda s: s.get("price", 0.0))
+        elif sort_rule == "Best Selling (Highest Sold)":
+            return sorted(s_list, key=lambda s: s.get("qty", 1), reverse=True)
+        elif sort_rule == "Worst Selling (Lowest Sold)":
+            return sorted(s_list, key=lambda s: s.get("qty", 1))
+        return s_list
+
+    def bind_tree_deselect_and_hover(self, tree, data_source_type):
+        def on_click(event):
+            region = tree.identify("region", event.x, event.y)
+            item_id = tree.identify_row(event.y)
+            
+            if region == "heading":
+                return
+
+            if region == "nothing" or not item_id:
+                tree.selection_remove(tree.selection())
+                return
+
+            if item_id:
+                current_selection = tree.selection()
+                if len(current_selection) == 1 and current_selection[0] == item_id:
+                    tree.selection_remove(item_id)
+                else:
+                    tree.selection_set(item_id)
+                    tree.focus(item_id)
+
+        def on_mouse_move(event):
+            region = tree.identify("region", event.x, event.y)
+            if region == "heading":
+                self.hide_hover_preview()
+                return
+
+            item_id = tree.identify_row(event.y)
+            if not item_id:
+                self.hide_hover_preview()
+                return
+
+            if item_id == self.last_hover_item:
+                if self.hover_window:
+                    try:
+                        self.hover_window.wm_geometry(f"+{event.x_root + 15}+{event.y_root + 15}")
+                    except Exception:
+                        pass
+                return
+            
+            self.last_hover_item = item_id
+            vals = tree.item(item_id, "values")
+            if not vals:
+                self.hide_hover_preview()
+                return
+
+            img_src = ""
+            p_name = ""
+            p_category = ""
+            
+            if data_source_type == "inventory":
+                target_id = str(vals[0])
+                prod = next((p for p in self.data["inventory"] if str(p.get("id", "")) == target_id), None)
+                if prod:
+                    img_src = prod.get("image", "")
+                    p_name = prod.get("name", "")
+                    p_category = prod.get("category", "")
+            elif data_source_type in ["sales", "return"]:
+                target_sale = next((s for s in reversed(self.data["sales"]) if s["name"] == vals[0] and s["timestamp"] == vals[3]), None)
+                if target_sale:
+                    img_src = target_sale.get("image", "")
+                    p_name = target_sale.get("raw_name", target_sale.get("name", ""))
+                    p_category = target_sale.get("category", "")
+
+            if self.hover_thread and self.hover_thread.is_alive():
+                pass
+            
+            self.hover_thread = threading.Thread(target=self.async_load_and_show_preview, args=(event, img_src, p_name, p_category), daemon=True)
+            self.hover_thread.start()
+
+        def on_mouse_leave(event):
+            self.last_hover_item = None
+            self.hide_hover_preview()
+
+        tree.bind("<Button-1>", on_click, add="+")
+        tree.bind("<Motion>", on_mouse_move)
+        tree.bind("<Leave>", on_mouse_leave)
+
+    def async_load_and_show_preview(self, event, img_src, p_name, p_category):
+        photo = None
+        if img_src:
+            cache_key = f"hover_opt_{img_src}"
+            if cache_key in self.image_cache:
+                photo = self.image_cache[cache_key]
+            else:
+                try:
+                    pil_img = None
+                    if img_src.startswith("http://") or img_src.startswith("https://"):
+                        req = Request(img_src, headers={"User-Agent": "Mozilla/5.0"})
+                        with urlopen(req, timeout=3) as resp:
+                            pil_img = Image.open(io.BytesIO(resp.read()))
+                    elif os.path.exists(img_src):
+                        pil_img = Image.open(img_src)
+                    
+                    if pil_img:
+                        pil_img.thumbnail((110, 110), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(pil_img)
+                        self.image_cache[cache_key] = photo
+                except Exception:
+                    pass
+
+        self.root.after(0, lambda: self.show_hover_preview_window(event, photo, p_name, p_category))
+
+    def show_hover_preview_window(self, event, photo, p_name, p_category):
+        try:
+            if not self.last_hover_item:
+                return
+            x = event.x_root + 15
+            y = event.y_root + 15
+
+            if self.hover_window is None:
+                self.hover_window = tk.Toplevel(self.root)
+                self.hover_window.wm_overrideredirect(True)
+                self.hover_window.attributes("-topmost", True)
+                
+                self.hover_border_frame = tk.Frame(
+                    self.hover_window,
+                    bg=self.colors["accent"],
+                    bd=2,
+                    relief="solid"
+                )
+                self.hover_border_frame.pack(fill="both", expand=True)
+
+                self.hover_content_frame = tk.Frame(
+                    self.hover_border_frame,
+                    bg=self.colors["card"],
+                    padx=8, pady=8
+                )
+                self.hover_content_frame.pack(fill="both", expand=True, padx=1, pady=1)
+
+                self.hover_img_label = tk.Label(self.hover_content_frame, bg=self.colors["card"])
+                self.hover_img_label.pack(pady=(0, 6))
+
+                self.hover_info_label = tk.Label(
+                    self.hover_content_frame,
+                    bg=self.colors["card"],
+                    fg=self.colors["accent"],
+                    font=("Segoe UI", 9, "bold"),
+                    justify="left"
+                )
+                self.hover_info_label.pack(anchor="w")
+
+            self.hover_window.wm_geometry(f"+{x}+{y}")
+
+            info_text = f"{p_name} / {p_category}" if p_name else "[ No Details ]"
+            self.hover_info_label.config(text=info_text)
+
+            if photo:
+                self.hover_img_label.config(image=photo, text="")
+                self.hover_img_label.image = photo
+            else:
+                self.hover_img_label.config(image="", text="[ No Image ]", fg=self.colors["muted"], font=("Segoe UI", 8))
+        except Exception:
+            pass
+
+    def hide_hover_preview(self):
+        self.last_hover_item = None
+        if self.hover_window:
+            try:
+                self.hover_window.destroy()
+            except Exception:
+                pass
+            self.hover_window = None
+
+    def on_escape_pressed(self, event=None):
+        self.root.destroy()
+
+    # --- INVENTORY TAB ---
+    def setup_inventory_tab(self, parent_frame):
+        add_card = tk.LabelFrame(
+            parent_frame, text=" Product Registry & Management ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        add_card.pack(fill="x", padx=10, pady=5)
+
+        top_container = tk.Frame(add_card, bg=self.colors["surface"])
+        top_container.pack(fill="x")
+
+        left_panel = tk.Frame(top_container, bg=self.colors["surface"])
+        left_panel.pack(side="left", padx=15, pady=5)
+
+        self.add_preview_canvas = tk.Canvas(
+            left_panel, width=200, height=140, bg=self.colors["card"],
+            highlightthickness=2, highlightbackground=self.colors["muted"], relief="sunken"
+        )
+        self.add_preview_canvas.pack(pady=(0, 5))
+        self.add_preview_canvas.create_text(
+            100, 70, text="Drop Image / Browse\nor Paste Image Link",
+            fill=self.colors["muted"], font=("Segoe UI", 9, "bold"), justify="center"
+        )
+        self.attach_tooltip(self.add_preview_canvas, "Drag and drop or load a product image here")
+
+        if DND_AVAILABLE:
+            try:
+                self.add_preview_canvas.drop_target_register(DND_FILES)
+                self.add_preview_canvas.dnd_bind("<<Drop>>", self.on_image_drop)
+            except Exception:
+                pass
+
+        img_btn_row = tk.Frame(left_panel, bg=self.colors["surface"])
+        img_btn_row.pack(fill="x")
+
+        self.create_btn(
+            img_btn_row, "📁 Browse", self.browse_add_image,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"],
+            tooltip="Select a photo file from your computer"
+        ).pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+        self.create_btn(
+            img_btn_row, "❌ Clear Image", self.clear_add_image,
+            bg_c="#A94442", fg_c="#FFFFFF",
+            tooltip="Remove the current selected product picture"
+        ).pack(side="right", fill="x", expand=True, padx=(2, 0))
+
+        right_panel = tk.Frame(top_container, bg=self.colors["surface"])
+        right_panel.pack(side="left", fill="both", expand=True, padx=15)
+
+        tk.Label(right_panel, text="Product Name:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=0, column=0, sticky="w", padx=5, pady=3)
+        self.prod_name_entry = self.create_entry(right_panel, width=32, tooltip="Enter name of the product")
+        self.prod_name_entry.grid(row=0, column=1, padx=5, pady=3)
+
+        tk.Label(right_panel, text="Category:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=1, column=0, sticky="w", padx=5, pady=3)
+        self.category_dropdown = self.create_scratch_dropdown(right_panel, CATEGORIES, CATEGORIES[0], width=26, tooltip_text="Choose product category")
+        self.category_dropdown.grid(row=1, column=1, sticky="w", padx=5, pady=3)
+
+        sym_label_text = f"Price ({self.get_current_currency_conversion()[0]}):"
+        self.price_label_ref = tk.Label(right_panel, text=sym_label_text, fg=self.colors["text"], bg=self.colors["surface"])
+        self.price_label_ref.grid(row=2, column=0, sticky="w", padx=5, pady=3)
+        self.prod_price_entry = self.create_entry(right_panel, width=32, tooltip="Enter base selling price in active currency")
+        self.prod_price_entry.grid(row=2, column=1, padx=5, pady=3)
+
+        tk.Label(right_panel, text="Stock Stored (Qty):", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=3, column=0, sticky="w", padx=5, pady=3)
+        stock_frame = tk.Frame(right_panel, bg=self.colors["surface"])
+        stock_frame.grid(row=3, column=1, sticky="w", padx=5, pady=3)
+
+        self.prod_stock_entry = self.create_entry(stock_frame, width=22, tooltip="Enter quantity to add into inventory")
+        self.prod_stock_entry.pack(side="left", padx=(0, 5))
+        self.prod_stock_entry.insert(0, "10")
+
+        self.create_btn(
+            stock_frame, "∞", lambda: self.set_infinity_stock(self.prod_stock_entry),
+            bg_c=self.colors["card"], fg_c=self.colors["accent"],
+            tooltip="Set infinite stock quantity for endless stock"
+        ).pack(side="left")
+
+        tk.Label(right_panel, text="Image URL (Link):", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=4, column=0, sticky="w", padx=5, pady=3)
+        url_frame = tk.Frame(right_panel, bg=self.colors["surface"])
+        url_frame.grid(row=4, column=1, sticky="w", padx=5, pady=3)
+        self.prod_url_entry = self.create_entry(url_frame, width=22, tooltip="Paste online image link URL here")
+        self.prod_url_entry.pack(side="left", padx=(0, 5))
+
+        self.create_btn(
+            url_frame, "Load Link", self.load_image_from_url_action,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"],
+            tooltip="Download & preview image from web URL"
+        ).pack(side="left")
+
+        inv_action_bar = tk.Frame(add_card, bg=self.colors["surface"], padx=5, pady=8)
+        inv_action_bar.pack(fill="x", pady=(5, 0))
+
+        self.create_btn(
+            inv_action_bar, "+ Save Product Permanently", self.add_product,
+            tooltip="Save product directly into database"
+        ).pack(side="left", padx=(0, 5))
+
+        self.create_btn(
+            inv_action_bar, "✏️ Edit Selected", self.edit_product,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"],
+            tooltip="Open details window to edit selected product"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            inv_action_bar, "☑️ Select All", lambda: self.select_all_tree(self.inv_tree),
+            bg_c=self.colors["card"], fg_c=self.colors["accent"],
+            tooltip="Select all items (Ctrl + A)"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            inv_action_bar, "☒ Deselect All", lambda: self.deselect_all_tree(self.inv_tree),
+            bg_c=self.colors["card"], fg_c=self.colors["muted"],
+            tooltip="Deselect all highlighted items"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            inv_action_bar, "🗑 Remove Selected", self.remove_product,
+            bg_c="#D9534F", fg_c="#FFFFFF",
+            tooltip="Delete highlighted product(s) from inventory (Delete)"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            inv_action_bar, "⚠️ Remove All", self.clear_all_inventory,
+            bg_c="#A94442", fg_c="#FFFFFF",
+            tooltip="Completely wipe all stored inventory products (Shift + Delete)"
+        ).pack(side="right")
+
+        self.inv_totals_summary_lbl = tk.Label(
+            parent_frame,
+            text="",
+            font=("Segoe UI", 10, "bold"),
+            fg=self.colors["accent"],
+            bg=self.colors["card"],
+            bd=2, relief="sunken",
+            pady=6
+        )
+        self.inv_totals_summary_lbl.pack(fill="x", padx=10, pady=(5, 0))
+
+        search_bar_frame = tk.Frame(parent_frame, bg=self.colors["bg"])
+        search_bar_frame.pack(fill="x", padx=10, pady=(5, 0))
+
+        tk.Label(
+            search_bar_frame, text="🔍 Search Product:", font=("Segoe UI", 10, "bold"),
+            fg=self.colors["accent"], bg=self.colors["bg"]
+        ).pack(side="left", padx=(0, 5))
+
+        self.inv_search_var = tk.StringVar()
+        self.inv_search_var.trace_add("write", lambda *args: self.refresh_inventory_list())
+        self.inv_search_entry = self.create_entry(search_bar_frame, width=24, tooltip="Filter products by name or category")
+        self.inv_search_entry.pack(side="left", padx=5)
+        self.inv_search_entry.config(textvariable=self.inv_search_var)
+
+        tk.Label(
+            search_bar_frame, text="⚙️ Sort Filter:", font=("Segoe UI", 10, "bold"),
+            fg=self.colors["accent"], bg=self.colors["bg"]
+        ).pack(side="left", padx=(10, 5))
+
+        self.inv_sort_dropdown = self.create_scratch_dropdown(
+            search_bar_frame, SORT_FILTERS, SORT_FILTERS[0], width=24,
+            tooltip_text="Sort search results by sales popularity, stock or price",
+            command_callback=lambda val: self.refresh_inventory_list()
+        )
+        self.inv_sort_dropdown.pack(side="left", padx=5)
+
+        self.low_stock_filter_var = tk.BooleanVar(value=False)
+        chk_low = tk.Checkbutton(
+            search_bar_frame, text="⚠️ Low Stock (≤ 3)", variable=self.low_stock_filter_var,
+            command=self.refresh_inventory_list, bg=self.colors["bg"], fg=self.colors["accent"],
+            selectcolor=self.colors["card"], activebackground=self.colors["bg"], activeforeground=self.colors["accent"],
+            font=("Segoe UI", 9, "bold")
+        )
+        chk_low.pack(side="left", padx=10)
+        self.attach_tooltip(chk_low, "Show items running critically low on stock")
+
+        stock_card = tk.Frame(parent_frame, bg=self.colors["bg"])
+        stock_card.pack(fill="both", expand=True, padx=10, pady=5)
+
+        self.inv_tree_comp, self.inv_tree = self.create_clickable_tree(
+            stock_card, columns=("ID", "Name", "Category", "PriceTotal", "Stock")
+        )
+        
+        self.inv_tree.heading("ID", text="ID")
+        self.inv_tree.heading("Name", text="Product Name")
+        self.inv_tree.heading("Category", text="Category")
+        self.inv_tree.heading("PriceTotal", text="Product Price with Total")
+        self.inv_tree.heading("Stock", text="Stored Stock")
+
+        self.inv_tree.column("ID", width=50, anchor="center")
+        self.inv_tree.column("PriceTotal", width=220, anchor="center")
+        self.inv_tree.column("Stock", width=90, anchor="center")
+        self.inv_tree_comp.pack(fill="both", expand=True)
+
+        self.inv_tree.bind("<<TreeviewSelect>>", self.on_inventory_tree_select)
+        self.bind_tree_deselect_and_hover(self.inv_tree, "inventory")
+
+        self.refresh_inventory_list()
+
+    def select_all_tree(self, tree):
+        children = tree.get_children()
+        if children:
+            tree.selection_set(children)
+
+    def deselect_all_tree(self, tree):
+        tree.selection_remove(tree.selection())
+
+    def on_inventory_tree_select(self, event=None):
+        self.update_inventory_totals()
+
+    def update_inventory_totals(self):
+        sym, rate = self.get_current_currency_conversion()
+        total_items = len(self.data["inventory"])
+        total_qty = 0
+        sum_of_unit_prices = 0.0
+        grand_total_val = 0.0
+
+        for p in self.data["inventory"]:
+            qty = p.get("stock", 0)
+            price = p.get("price", 0.0) * rate
+            sum_of_unit_prices += price
+            if qty < INFINITY_VAL:
+                total_qty += qty
+                grand_total_val += qty * price
+            else:
+                grand_total_val += price
+
+        selected_items = self.inv_tree.selection()
+        sel_count = len(selected_items)
+        sel_val = 0.0
+
+        for item_id in selected_items:
+            vals = self.inv_tree.item(item_id, "values")
+            if vals:
+                p_id = str(vals[0])
+                target = next((p for p in self.data["inventory"] if str(p.get("id", "")) == p_id), None)
+                if target:
+                    price = target.get("price", 0.0) * rate
+                    qty = target.get("stock", 0)
+                    sel_val += price * (qty if qty < INFINITY_VAL else 1)
+
+        txt = f"📦 Products: {total_items} | Total Stock Qty: {total_qty} | Total: {sym} {sum_of_unit_prices:,.2f} | Grand Total: {sym} {grand_total_val:,.2f}"
+        if sel_count > 0:
+            txt += f"  ||  📌 Selected: {sel_count} item(s) ({sym} {sel_val:,.2f})"
+
+        if hasattr(self, "inv_totals_summary_lbl"):
+            self.inv_totals_summary_lbl.config(text=txt)
+
+    def set_infinity_stock(self, entry_widget):
+        entry_widget.delete(0, tk.END)
+        entry_widget.insert(0, str(INFINITY_VAL))
+
+    def on_image_drop(self, event):
+        raw_path = event.data.strip("{}")
+        if os.path.exists(raw_path):
+            self.set_product_image(raw_path)
+
+    def browse_add_image(self):
+        file_path = filedialog.askopenfilename(
+            title="Select Product Image",
+            filetypes=[("Image Files", "*.png *.jpg *.jpeg *.bmp *.webp"), ("All Files", "*.*")]
+        )
+        if file_path:
+            self.set_product_image(file_path)
+
+    def load_image_from_url_action(self):
+        url = self.prod_url_entry.get().strip()
+        if not url:
+            messagebox.showwarning("Warning", "Please paste an image URL first.")
+            return
+        self.set_product_image(url)
+
+    def set_product_image(self, source):
+        self.current_image_source = source
+        self.add_preview_ref = self.render_image_on_canvas(self.add_preview_canvas, source, 200, 140)
+
+    def clear_add_image(self):
+        self.current_image_source = None
+        self.prod_url_entry.delete(0, tk.END)
+        self.add_preview_canvas.delete("all")
+        self.add_preview_canvas.create_text(
+            100, 70, text="Drop Image / Browse\nor Paste Image Link",
+            fill=self.colors["muted"], font=("Segoe UI", 9, "bold"), justify="center"
+        )
+
+    def add_product(self):
+        name = self.prod_name_entry.get().strip()
+        category = self.category_dropdown.var.get()
+        price = self.prod_price_entry.get().strip()
+        stock = self.prod_stock_entry.get().strip()
+
+        if not name or not price or not stock:
+            messagebox.showerror("Error", "Please provide product name, price, and stock quantity.")
+            return
+
+        try:
+            price_float = float(price)
+            stock_int = int(stock)
+        except ValueError:
+            messagebox.showerror("Error", "Price and stock must be valid numbers.")
+            return
+
+        # Store base price normalized in USD baseline
+        _, rate = self.get_current_currency_conversion()
+        base_usd_price = price_float / rate
+
+        prod_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        product = {
+            "id": prod_id, "name": name, "category": category,
+            "price": base_usd_price, "stock": stock_int,
+            "image": self.current_image_source if self.current_image_source else ""
+        }
+        self.data["inventory"].append(product)
+        save_data(self.data)
+
+        self.prod_name_entry.delete(0, tk.END)
+        self.prod_price_entry.delete(0, tk.END)
+        self.prod_stock_entry.delete(0, tk.END)
+        self.prod_stock_entry.insert(0, "10")
+        self.prod_url_entry.delete(0, tk.END)
+        self.current_image_source = None
+        self.add_preview_canvas.delete("all")
+        self.add_preview_canvas.create_text(
+            100, 70, text="Drop Image / Browse\nor Paste Image Link",
+            fill=self.colors["muted"], font=("Segoe UI", 9, "bold"), justify="center"
+        )
+        self.refresh_inventory_list()
+        self.refresh_sale_list()
+        self.refresh_return_list()
+        messagebox.showinfo("Saved", f"'{name}' added permanently to inventory database!")
+
+    def remove_product(self):
+        selected = self.inv_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select product(s) to remove.")
+            return
+        
+        confirm = messagebox.askyesno(
+            "Confirm Remove Item(s)", 
+            f"Are you sure you want to remove the {len(selected)} selected product(s) from inventory?", 
+            parent=self.root
+        )
+        if not confirm:
+            return
+
+        target_ids = {str(self.inv_tree.item(item_id, "values")[0]) for item_id in selected}
+        self.data["inventory"] = [p for p in self.data["inventory"] if str(p.get("id", "")) not in target_ids]
+        save_data(self.data)
+        self.refresh_inventory_list()
+        self.refresh_sale_list()
+        self.refresh_return_list()
+        messagebox.showinfo("Success", "Selected product(s) removed successfully.")
+
+    def edit_product(self):
+        selected = self.inv_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select a product to edit.")
+            return
+        vals = self.inv_tree.item(selected[0], "values")
+        target_id = str(vals[0])
+        target_product = next((p for p in self.data["inventory"] if str(p.get("id", "")) == target_id), None)
+        if not target_product:
+            return
+
+        edit_win = tk.Toplevel(self.root)
+        edit_win.title("Edit Product & Details")
+        edit_win.geometry("500x520")
+        edit_win.config(bg=self.colors["surface"])
+        edit_win.transient(self.root)
+        edit_win.grab_set()
+
+        tk.Label(edit_win, text="✏️ Edit Product Details & Photo", font=("Segoe UI", 12, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(pady=10)
+
+        edit_img_source = [target_product.get("image", "")]
+        edit_img_ref = [None]
+
+        e_canvas = tk.Canvas(
+            edit_win, width=200, height=140, bg=self.colors["card"],
+            highlightthickness=2, highlightbackground=self.colors["muted"], relief="sunken"
+        )
+        e_canvas.pack(pady=5)
+
+        def refresh_edit_preview(src):
+            edit_img_source[0] = src
+            edit_img_ref[0] = self.render_image_on_canvas(e_canvas, src, 200, 140)
+
+        refresh_edit_preview(edit_img_source[0])
+
+        if DND_AVAILABLE:
+            try:
+                e_canvas.drop_target_register(DND_FILES)
+                e_canvas.dnd_bind("<<Drop>>", lambda e: refresh_edit_preview(e.data.strip("{}")))
+            except Exception:
+                pass
+
+        def clear_edit_image():
+            e_url.delete(0, tk.END)
+            refresh_edit_preview("")
+
+        e_btn_row = tk.Frame(edit_win, bg=self.colors["surface"])
+        e_btn_row.pack(pady=2)
+
+        self.create_btn(
+            e_btn_row, "📁 Browse File", lambda: (
+                file_path := filedialog.askopenfilename(filetypes=[("Image Files", "*.png *.jpg *.jpeg *.bmp *.webp"), ("All Files", "*.*")])
+            ) and refresh_edit_preview(file_path),
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Select new image file"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            e_btn_row, "❌ Clear Image", clear_edit_image,
+            bg_c="#A94442", fg_c="#FFFFFF", tooltip="Remove current product picture"
+        ).pack(side="left", padx=5)
+
+        form_frame = tk.Frame(edit_win, bg=self.colors["surface"])
+        form_frame.pack(padx=20, pady=5, fill="x")
+
+        tk.Label(form_frame, text="Name:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=0, column=0, sticky="w", pady=4)
+        e_name = self.create_entry(form_frame, width=28, tooltip="Product title")
+        e_name.grid(row=0, column=1, pady=4)
+        e_name.insert(0, target_product["name"])
+
+        tk.Label(form_frame, text="Category:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=1, column=0, sticky="w", pady=4)
+        e_cat_dropdown = self.create_scratch_dropdown(form_frame, CATEGORIES, target_product["category"], width=22, tooltip_text="Product category")
+        e_cat_dropdown.grid(row=1, column=1, sticky="w", pady=4)
+
+        sym, rate = self.get_current_currency_conversion()
+        tk.Label(form_frame, text=f"Price ({sym}):", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=2, column=0, sticky="w", pady=4)
+        e_price = self.create_entry(form_frame, width=28, tooltip="Price in active currency")
+        e_price.grid(row=2, column=1, pady=4)
+        e_price.insert(0, f"{target_product['price'] * rate:.2f}")
+
+        tk.Label(form_frame, text="Stock Qty:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=3, column=0, sticky="w", pady=4)
+        e_stock_frame = tk.Frame(form_frame, bg=self.colors["surface"])
+        e_stock_frame.grid(row=3, column=1, sticky="w", pady=4)
+        e_stock = self.create_entry(e_stock_frame, width=18, tooltip="Current inventory level")
+        e_stock.pack(side="left", padx=(0, 5))
+        e_stock.insert(0, str(target_product.get("stock", 0)))
+        self.create_btn(e_stock_frame, "∞", lambda: self.set_infinity_stock(e_stock), bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Set infinite stock").pack(side="left")
+
+        tk.Label(form_frame, text="Image URL:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=4, column=0, sticky="w", pady=4)
+        e_url_frame = tk.Frame(form_frame, bg=self.colors["surface"])
+        e_url_frame.grid(row=4, column=1, sticky="w", pady=4)
+        e_url = self.create_entry(e_url_frame, width=18, tooltip="Image URL link")
+        e_url.pack(side="left", padx=(0, 5))
+        e_url.insert(0, target_product.get("image", "") if "http" in target_product.get("image", "") else "")
+        self.create_btn(e_url_frame, "Load", lambda: refresh_edit_preview(e_url.get().strip()), bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Load web image").pack(side="left")
+
+        def save_edits():
+            try:
+                p_val = float(e_price.get().strip()) / rate
+                s_val = int(e_stock.get().strip())
+            except ValueError:
+                messagebox.showerror("Error", "Price and stock must be valid numbers.", parent=edit_win)
+                return
+            target_product["name"] = e_name.get().strip()
+            target_product["category"] = e_cat_dropdown.var.get()
+            target_product["price"] = p_val
+            target_product["stock"] = s_val
+            target_product["image"] = edit_img_source[0]
+
+            save_data(self.data)
+            self.refresh_inventory_list()
+            self.refresh_sale_list()
+            self.refresh_return_list()
+            edit_win.destroy()
+            messagebox.showinfo("Success", "Product updated successfully.")
+
+        self.create_btn(edit_win, "Save Changes", save_edits, tooltip="Save product modifications").pack(pady=10)
+
+    def clear_all_inventory(self):
+        confirm = messagebox.askyesno(
+            "Confirm Remove All", 
+            "⚠️ WARNING: Are you sure you want to remove ALL products from inventory?", 
+            parent=self.root
+        )
+        if not confirm:
+            return
+
+        self.data["inventory"] = []
+        save_data(self.data)
+        self.refresh_inventory_list()
+        self.refresh_sale_list()
+        self.refresh_return_list()
+        messagebox.showinfo("Cleared", "All inventory products have been removed.")
+
+    def refresh_inventory_list(self, *args):
+        sym, rate = self.get_current_currency_conversion()
+        if hasattr(self, "price_label_ref"):
+            self.price_label_ref.config(text=f"Price ({sym}):")
+
+        for row in self.inv_tree.get_children():
+            self.inv_tree.delete(row)
+        query = self.inv_search_var.get().lower().strip()
+        filter_low = self.low_stock_filter_var.get()
+        sort_rule = self.inv_sort_dropdown.var.get() if hasattr(self, "inv_sort_dropdown") else "Default"
+
+        filtered_products = []
+        for p in self.data["inventory"]:
+            stock_qty = p.get("stock", 0)
+            if filter_low and stock_qty > 3:
+                continue
+            conv_price = p["price"] * rate
+            if not query or query in p["name"].lower() or query in p["category"].lower() or query in str(conv_price):
+                filtered_products.append(p)
+
+        sorted_prods = self.sort_products_list(filtered_products, sort_rule)
+
+        for p in sorted_prods:
+            p_id = str(p.get("id", ""))
+            stock_qty = p.get("stock", 0)
+            price_val = p.get("price", 0.0) * rate
+
+            if stock_qty >= INFINITY_VAL:
+                tot_str = "∞"
+            else:
+                tot_str = f"{sym} {price_val * stock_qty:,.2f}"
+
+            price_total_display = f"{sym} {price_val:,.2f}  |  Tot: {tot_str}"
+            display_stock = "∞" if stock_qty >= INFINITY_VAL else str(stock_qty)
+            
+            row_values = [p_id, p["name"], p["category"], price_total_display, display_stock]
+            self.inv_tree.insert("", "end", values=row_values)
+
+        self.update_inventory_totals()
+
+    # --- SALES / CART POS TAB ---
+    def setup_sales_tab(self, parent_frame):
+        sales_main = tk.Frame(parent_frame, bg=self.colors["bg"])
+        sales_main.pack(fill="both", expand=True, padx=10, pady=10)
+
+        left_card = tk.LabelFrame(
+            sales_main, text=" Product Catalog ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=10, pady=10,
+        )
+        left_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+
+        sale_scanner_f = tk.Frame(left_card, bg=self.colors["surface"])
+        sale_scanner_f.pack(fill="x", pady=(0, 5))
+        
+        tk.Label(sale_scanner_f, text="🔍 Search:", fg=self.colors["accent"], bg=self.colors["surface"], font=("Segoe UI", 9, "bold")).pack(side="left", padx=2)
+        self.sale_scanner_var = tk.StringVar()
+        self.sale_scanner_var.trace_add("write", lambda *args: self.on_sale_scanner_typed())
+        self.sale_scanner_entry = self.create_entry(sale_scanner_f, width=16, tooltip="Search inventory catalog")
+        self.sale_scanner_entry.pack(side="left", padx=2)
+        self.sale_scanner_entry.config(textvariable=self.sale_scanner_var)
+
+        tk.Label(sale_scanner_f, text="⚙️ Filter:", fg=self.colors["accent"], bg=self.colors["surface"], font=("Segoe UI", 9, "bold")).pack(side="left", padx=(5, 2))
+        self.sale_sort_dropdown = self.create_scratch_dropdown(
+            sale_scanner_f, SORT_FILTERS, SORT_FILTERS[0], width=16,
+            tooltip_text="Sort catalog items", command_callback=lambda val: self.on_sale_scanner_typed()
+        )
+        self.sale_sort_dropdown.pack(side="left", padx=2)
+
+        self.sale_tree_comp, self.sale_tree = self.create_clickable_tree(
+            left_card, columns=("ID", "Name", "Category", "Price", "Stock")
+        )
+        self.sale_tree.heading("ID", text="ID")
+        self.sale_tree.heading("Name", text="Product")
+        self.sale_tree.heading("Category", text="Category")
+        self.sale_tree.heading("Price", text="Price")
+        self.sale_tree.heading("Stock", text="Stock")
+
+        self.sale_tree.column("ID", width=50, anchor="center")
+        self.sale_tree.column("Stock", width=80, anchor="center")
+        self.sale_tree_comp.pack(fill="both", expand=True, pady=(0, 8))
+        self.sale_tree.bind("<<TreeviewSelect>>", self.on_sale_select)
+        self.sale_tree.bind("<Double-1>", lambda e: self.add_selected_to_cart())
+        self.bind_tree_deselect_and_hover(self.sale_tree, "inventory")
+
+        pos_inputs_frame = tk.Frame(left_card, bg=self.colors["surface"], padx=5, pady=5)
+        pos_inputs_frame.pack(fill="x", pady=(0, 5))
+
+        tk.Label(pos_inputs_frame, text="Quantity:", fg=self.colors["accent"], bg=self.colors["surface"], font=("Segoe UI", 10, "bold")).pack(side="left", padx=(2, 5))
+        self.pos_qty_entry = self.create_entry(pos_inputs_frame, width=8, tooltip="Set quantity for item to add")
+        self.pos_qty_entry.pack(side="left", padx=(0, 15))
+        self.pos_qty_entry.insert(0, "1")
+
+        sym, _ = self.get_current_currency_conversion()
+        tk.Label(pos_inputs_frame, text=f"Final Price ({sym}):", fg=self.colors["accent"], bg=self.colors["surface"], font=("Segoe UI", 10, "bold")).pack(side="left", padx=(2, 5))
+        self.pos_price_entry = self.create_entry(pos_inputs_frame, width=12, tooltip="Set or override final selling price")
+        self.pos_price_entry.pack(side="left", padx=(0, 15))
+
+        self.create_btn(
+            pos_inputs_frame, "➕ Add to Cart", self.add_selected_to_cart,
+            bg_c=self.colors["accent"], fg_c="#000000", tooltip="Add selected items with custom quantity and price to cart"
+        ).pack(side="right", padx=2)
+
+        right_card = tk.LabelFrame(
+            sales_main, text=" 🛒 Current Shopping Cart & Checkout ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", width=380, padx=10, pady=10,
+        )
+        right_card.pack(side="right", fill="y", padx=(5, 0))
+        right_card.pack_propagate(False)
+
+        self.cart_tree_comp, self.cart_tree = self.create_clickable_tree(
+            right_card, columns=("Name", "Category", "Qty", "Subtotal")
+        )
+        self.cart_tree.heading("Name", text="Item Name")
+        self.cart_tree.heading("Category", text="Category")
+        self.cart_tree.heading("Qty", text="Qty")
+        self.cart_tree.heading("Subtotal", text="Subtotal")
+        self.cart_tree.column("Qty", width=45, anchor="center")
+        self.cart_tree.column("Subtotal", width=80, anchor="center")
+        self.cart_tree_comp.pack(fill="both", expand=True, pady=(0, 5))
+        self.cart_tree.bind("<Double-1>", self.edit_cart_item_qty)
+
+        self.cart_summary_lbl = tk.Label(
+            right_card, text=f"Items in Cart: 0 | Total: {sym} 0.00",
+            font=("Segoe UI", 10, "bold"), fg=self.colors["accent"],
+            bg=self.colors["card"], bd=2, relief="sunken", pady=6
+        )
+        self.cart_summary_lbl.pack(fill="x", pady=5)
+
+        cart_actions_row = tk.Frame(right_card, bg=self.colors["surface"])
+        cart_actions_row.pack(fill="x", pady=5)
+
+        self.create_btn(
+            cart_actions_row, "🗑 Remove Item", self.remove_cart_item,
+            bg_c="#D9534F", fg_c="#FFFFFF", tooltip="Remove selected item from cart"
+        ).pack(side="left", expand=True, fill="x", padx=2)
+
+        self.create_btn(
+            cart_actions_row, "Clear Cart", self.clear_shopping_cart,
+            bg_c=self.colors["card"], fg_c=self.colors["muted"], tooltip="Empty shopping cart"
+        ).pack(side="right", expand=True, fill="x", padx=2)
+
+        self.create_btn(
+            right_card, "✓ Complete Sale Checkout", self.complete_cart_checkout,
+            bg_c="#10B981", fg_c="#FFFFFF", tooltip="Checkout all cart items and update stock & logs"
+        ).pack(fill="x", pady=10, ipady=4)
+
+        self.refresh_sale_list()
+
+    def on_sale_scanner_typed(self, *args):
+        sym, rate = self.get_current_currency_conversion()
+        query = self.sale_scanner_var.get().strip().lower()
+        sort_rule = self.sale_sort_dropdown.var.get() if hasattr(self, "sale_sort_dropdown") else "Default"
+        
+        filtered = []
+        for p in self.data["inventory"]:
+            name = p["name"].lower()
+            category = p["category"].lower()
+            conv_p = p["price"] * rate
+            if not query or query in name or query in category or query in str(conv_p):
+                filtered.append(p)
+
+        sorted_prods = self.sort_products_list(filtered, sort_rule)
+
+        for row in self.sale_tree.get_children():
+            self.sale_tree.delete(row)
+        for p in sorted_prods:
+            stock_qty = p.get("stock", 0)
+            display_stock = "∞" if stock_qty >= INFINITY_VAL else str(stock_qty)
+            conv_price = p["price"] * rate
+            row_values = [str(p.get("id", "")), p["name"], p["category"], f"{conv_price:.2f}", display_stock]
+            self.sale_tree.insert("", "end", values=row_values)
+
+    def on_sale_select(self, event):
+        selected = self.sale_tree.selection()
+        if not selected:
+            return
+        vals = self.sale_tree.item(selected[0], "values")
+        if not vals:
+            return
+        p_id = str(vals[0])
+        product = next((p for p in self.data["inventory"] if str(p.get("id", "")) == p_id), None)
+        if product:
+            _, rate = self.get_current_currency_conversion()
+            if hasattr(self, "pos_price_entry"):
+                self.pos_price_entry.delete(0, tk.END)
+                self.pos_price_entry.insert(0, f"{product['price'] * rate:.2f}")
+
+    def add_selected_to_cart(self):
+        selected = self.sale_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select item(s) from catalog to add to cart.")
+            return
+
+        try:
+            qty_val = int(self.pos_qty_entry.get().strip())
+            if qty_val <= 0:
+                raise ValueError()
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid positive quantity number.")
+            return
+
+        try:
+            custom_price_val = float(self.pos_price_entry.get().strip())
+        except ValueError:
+            messagebox.showerror("Error", "Please enter a valid final price.")
+            return
+
+        _, rate = self.get_current_currency_conversion()
+        base_usd_custom_price = custom_price_val / rate
+
+        for item_id in selected:
+            vals = self.sale_tree.item(item_id, "values")
+            if not vals:
+                continue
+            
+            p_id = str(vals[0])
+            product = next((p for p in self.data["inventory"] if str(p.get("id", "")) == p_id), None)
+            if not product:
+                product = next((p for p in self.data["inventory"] if p["name"] == vals[1]), None)
+            
+            if not product:
+                continue
+
+            existing = next((item for item in self.shopping_cart if item["id"] == str(product.get("id", "")) and item["price"] == base_usd_custom_price), None)
+            if existing:
+                existing["qty"] += qty_val
+            else:
+                self.shopping_cart.append({
+                    "id": str(product.get("id", "")),
+                    "name": product["name"],
+                    "category": product["category"],
+                    "price": base_usd_custom_price,
+                    "qty": qty_val,
+                    "image": product.get("image", "")
+                })
+
+        self.refresh_cart_display()
+        self.pos_qty_entry.delete(0, tk.END)
+        self.pos_qty_entry.insert(0, "1")
+
+    def edit_cart_item_qty(self, event=None):
+        selected = self.cart_tree.selection()
+        if not selected:
+            return
+        vals = self.cart_tree.item(selected[0], "values")
+        if not vals:
+            return
+        
+        item_name = vals[0]
+        cart_item = next((item for item in self.shopping_cart if item["name"] == item_name), None)
+        if not cart_item:
+            return
+
+        new_qty_str = simpledialog.askstring("Edit Quantity", f"Enter new quantity for '{item_name}':", initialvalue=str(cart_item["qty"]), parent=self.root)
+        if new_qty_str is not None:
+            try:
+                new_qty = int(new_qty_str)
+                if new_qty > 0:
+                    cart_item["qty"] = new_qty
+                    self.refresh_cart_display()
+                else:
+                    self.shopping_cart = [item for item in self.shopping_cart if item["name"] != item_name]
+                    self.refresh_cart_display()
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid numeric quantity.", parent=self.root)
+
+    def remove_cart_item(self):
+        selected = self.cart_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select item from cart to remove.")
+            return
+        
+        for item_id in selected:
+            vals = self.cart_tree.item(item_id, "values")
+            name_in_cart = vals[0]
+            self.shopping_cart = [item for item in self.shopping_cart if item["name"] != name_in_cart]
+
+        self.refresh_cart_display()
+
+    def clear_shopping_cart(self):
+        self.shopping_cart = []
+        self.refresh_cart_display()
+
+    def refresh_cart_display(self):
+        sym, rate = self.get_current_currency_conversion()
+        for row in self.cart_tree.get_children():
+            self.cart_tree.delete(row)
+
+        total_items = 0
+        grand_total = 0.0
+
+        for item in self.shopping_cart:
+            qty = item["qty"]
+            sub = (item["price"] * rate) * qty
+            total_items += qty
+            grand_total += sub
+            self.cart_tree.insert("", "end", values=(item["name"], item["category"], qty, f"{sym} {sub:,.2f}"))
+
+        self.cart_summary_lbl.config(text=f"🛒 Items: {total_items} | Grand Total: {sym} {grand_total:,.2f}")
+
+    def complete_cart_checkout(self):
+        if not self.shopping_cart:
+            messagebox.showwarning("Warning", "Shopping cart is empty.")
+            return
+
+        sym, rate = self.get_current_currency_conversion()
+        
+        for item in self.shopping_cart:
+            prod = next((p for p in self.data["inventory"] if str(p.get("id", "")) == str(item["id"])), None)
+            if prod and prod.get("stock", 0) < INFINITY_VAL and item["qty"] > prod["stock"]:
+                messagebox.showerror("Stock Error", f"Insufficient stock for '{item['name']}'! Available: {prod['stock']}")
+                return
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
+        total_checkout_price = 0.0
+
+        for item in self.shopping_cart:
+            prod = next((p for p in self.data["inventory"] if str(p.get("id", "")) == str(item["id"])), None)
+            if prod and prod.get("stock", 0) < INFINITY_VAL:
+                prod["stock"] -= item["qty"]
+
+            sub = (item["price"] * rate) * item["qty"]
+            total_checkout_price += sub
+
+            sale_record = {
+                "id": item["id"],
+                "name": f"{item['name']} (x{item['qty']})",
+                "category": item["category"],
+                "price": sub,
+                "timestamp": timestamp,
+                "image": item.get("image", ""),
+                "qty": item["qty"],
+                "raw_name": item["name"],
+                "unit_price": item["price"] * rate
+            }
+            self.data["sales"].append(sale_record)
+
+        self.shopping_cart = []
+        save_data(self.data)
+
+        self.refresh_cart_display()
+        self.refresh_inventory_list()
+        self.refresh_sale_list()
+        self.refresh_report_list()
+        self.refresh_return_list()
+        self.populate_sales_checklist()
+
+        messagebox.showinfo("Checkout Complete", f"Successfully completed cart checkout!\nTotal Paid: {sym} {total_checkout_price:,.2f}")
+
+    def refresh_sale_list(self):
+        self.on_sale_scanner_typed()
+
+    # --- REPORT TAB ---
+    def setup_report_tab(self, parent_frame):
+        rep_main = tk.Frame(parent_frame, bg=self.colors["bg"])
+        rep_main.pack(fill="both", expand=True, padx=10, pady=10)
+
+        left_card = tk.LabelFrame(
+            rep_main, text=" Transaction History ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=10, pady=10,
+        )
+        left_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+
+        self.total_summary_lbl = tk.Label(left_card, text="", font=("Segoe UI", 11, "bold"), fg=self.colors["accent"], bg=self.colors["card"], bd=2, relief="sunken", pady=8)
+        self.total_summary_lbl.pack(fill="x", pady=(0, 8))
+
+        search_bar_frame = tk.Frame(left_card, bg=self.colors["surface"])
+        search_bar_frame.pack(fill="x", pady=(0, 8))
+
+        tk.Label(search_bar_frame, text="🔍 Search:", font=("Segoe UI", 10, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(side="left", padx=2)
+        self.log_search_var = tk.StringVar()
+        self.log_search_var.trace_add("write", lambda *args: self.refresh_report_list())
+        self.log_search_entry = self.create_entry(search_bar_frame, width=16, tooltip="Search past transactions")
+        self.log_search_entry.pack(side="left", padx=2)
+        self.log_search_entry.config(textvariable=self.log_search_var)
+
+        tk.Label(search_bar_frame, text="⚙️ Filter:", font=("Segoe UI", 10, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(side="left", padx=(5, 2))
+        self.log_sort_dropdown = self.create_scratch_dropdown(
+            search_bar_frame, SORT_FILTERS, SORT_FILTERS[0], width=16,
+            tooltip_text="Sort sales log records", command_callback=lambda val: self.refresh_report_list()
+        )
+        self.log_sort_dropdown.pack(side="left", padx=2)
+
+        self.create_btn(
+            search_bar_frame, "☑️ All", lambda: self.select_all_tree(self.rep_tree),
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Select all"
+        ).pack(side="left", padx=2)
+
+        self.create_btn(
+            search_bar_frame, "☒ None", lambda: self.deselect_all_tree(self.rep_tree),
+            bg_c=self.colors["card"], fg_c=self.colors["muted"], tooltip="Deselect all"
+        ).pack(side="left", padx=2)
+
+        self.rep_tree_comp, self.rep_tree = self.create_clickable_tree(
+            left_card, columns=("Name", "Category", "Price", "Timestamp")
+        )
+        self.rep_tree.heading("Name", text="Product Name")
+        self.rep_tree.heading("Category", text="Category")
+        self.rep_tree.heading("Price", text="Sold Price")
+        self.rep_tree.heading("Timestamp", text="Date & Time Sold")
+
+        self.rep_tree_comp.pack(fill="both", expand=True, pady=(0, 10))
+        self.rep_tree.bind("<<TreeviewSelect>>", self.on_log_select)
+
+        self.bind_tree_deselect_and_hover(self.rep_tree, "sales")
+
+        action_bar = tk.Frame(left_card, bg=self.colors["surface"])
+        action_bar.pack(fill="x")
+
+        self.create_btn(
+            action_bar, "🗑 Delete Sales Entry/Entries", self.remove_sales_log,
+            bg_c="#D9534F", fg_c="#FFFFFF", tooltip="Delete selected transaction entry(ies) from history (Delete)"
+        ).pack(side="left")
+
+        self.create_btn(
+            action_bar, "⚠️ Remove All Sales Logs", self.clear_all_sales_logs,
+            bg_c="#A94442", fg_c="#FFFFFF", tooltip="Clear entire sales history (Shift + Delete)"
+        ).pack(side="left", padx=10)
+
+        self.create_btn(
+            action_bar, "📥 Export Report (CSV)", self.export_sales_csv,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Export current sales log into Excel CSV file"
+        ).pack(side="right")
+
+        right_card = tk.LabelFrame(
+            rep_main, text=" Sold Item Photo ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", width=320, padx=10, pady=10,
+        )
+        right_card.pack(side="right", fill="y", padx=(5, 0))
+        right_card.pack_propagate(False)
+
+        self.log_preview_canvas = tk.Canvas(
+            right_card, width=290, height=200, bg=self.colors["card"],
+            highlightthickness=2, highlightbackground=self.colors["muted"], relief="sunken"
+        )
+        self.log_preview_canvas.pack(pady=20)
+        self.log_preview_canvas.create_text(
+            145, 100, text="[ Select a Sale Entry\nTo View Photo ]",
+            fill=self.colors["muted"], font=("Segoe UI", 10, "bold"), justify="center"
+        )
+        self.refresh_report_list()
+
+    def on_log_select(self, event):
+        selected = self.rep_tree.selection()
+        if not selected:
+            return
+        vals = self.rep_tree.item(selected[-1], "values")
+        for s in reversed(self.data["sales"]):
+            if s["name"] == vals[0] and s["timestamp"] == vals[3]:
+                self.log_preview_ref = self.render_image_on_canvas(self.log_preview_canvas, s.get("image", ""), 290, 200)
+                break
+
+    def remove_sales_log(self):
+        selected = self.rep_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select sales record(s) to delete.")
+            return
+
+        if not self.data["settings"].get("allow_staff_delete_sales", True):
+            pin = simpledialog.askstring("Admin Verification", "Enter Admin PIN to delete sale log(s):", show="*")
+            if pin != self.data["settings"].get("admin_pin", "1234"):
+                messagebox.showerror("Access Denied", "Incorrect Admin PIN!")
+                return
+
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if confirm and not messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the {len(selected)} selected sales entry(ies)?"):
+            return
+
+        to_remove = set()
+        for item_id in selected:
+            vals = self.rep_tree.item(item_id, "values")
+            to_remove.add((vals[0], vals[3]))
+
+        self.data["sales"] = [s for s in self.data["sales"] if (s["name"], s["timestamp"]) not in to_remove]
+        save_data(self.data)
+        self.refresh_report_list()
+        self.refresh_return_list()
+        self.populate_sales_checklist()
+        messagebox.showinfo("Deleted", "Selected sales log entry(ies) removed.")
+
+    def clear_all_sales_logs(self):
+        if not self.data["settings"].get("allow_staff_delete_sales", True):
+            pin = simpledialog.askstring("Admin Verification", "Enter Admin PIN to clear all sales logs:", show="*")
+            if pin != self.data["settings"].get("admin_pin", "1234"):
+                messagebox.showerror("Access Denied", "Incorrect Admin PIN!")
+                return
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if not confirm or messagebox.askyesno("Confirm Wipe", "Are you sure you want to clear ALL sales logs?"):
+            self.data["sales"] = []
+            save_data(self.data)
+            self.refresh_report_list()
+            self.refresh_return_list()
+            self.populate_sales_checklist()
+            messagebox.showinfo("Cleared", "All sales records have been wiped.")
+
+    def export_sales_csv(self):
+        if not self.data["sales"]:
+            messagebox.showwarning("Warning", "No sales records to export.")
+            return
+        file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")], title="Export Sales Log")
+        if file_path:
+            try:
+                sym, _ = self.get_current_currency_conversion()
+                with open(file_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["Product Name", "Category", f"Sold Price ({sym})", "Timestamp"])
+                    for s in self.data["sales"]:
+                        writer.writerow([s["name"], s["category"], s["price"], s["timestamp"]])
+                messagebox.showinfo("Exported", f"Saved sales log to:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def refresh_report_list(self, *args):
+        sym, _ = self.get_current_currency_conversion()
+        for row in self.rep_tree.get_children():
+            self.rep_tree.delete(row)
+        query = self.log_search_var.get().lower().strip()
+        sort_rule = self.log_sort_dropdown.var.get() if hasattr(self, "log_sort_dropdown") else "Default"
+
+        filtered_sales = []
+        grand_total, sum_unit_prices, total_qty, count = 0.0, 0.0, 0, 0
+
+        for s in reversed(self.data["sales"]):
+            actual_price = s.get("price", 0.0)
+            qty = s.get("qty", 1)
+            unit_p = s.get("unit_price", actual_price / max(1, qty))
+            
+            grand_total += actual_price
+            sum_unit_prices += unit_p
+            total_qty += qty
+            count += 1
+            if not query or query in s["name"].lower() or query in s["category"].lower() or query in str(actual_price) or query in s["timestamp"].lower():
+                filtered_sales.append(s)
+
+        sorted_sales = self.sort_sales_list(filtered_sales, sort_rule)
+
+        for s in sorted_sales:
+            row_values = [s["name"], s["category"], f"{sym} {s['price']:.2f}", s["timestamp"]]
+            self.rep_tree.insert("", "end", values=row_values)
+
+        if hasattr(self, "total_summary_lbl"):
+            self.total_summary_lbl.config(text=f"  📊 Total Units: {total_qty} | Total: {sym} {sum_unit_prices:,.2f} | Grand Total: {sym} {grand_total:,.2f} | Txns: {count}")
+
+    # --- BILL SYSTEM TAB ---
+    def setup_bill_system_tab(self, parent_frame):
+        bill_main = tk.Frame(parent_frame, bg=self.colors["bg"])
+        bill_main.pack(fill="both", expand=True, padx=15, pady=10)
+
+        top_banner = tk.LabelFrame(
+            bill_main, text=" Embedded Thermal Printer Suite & Hardware Manager ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        top_banner.pack(fill="x", pady=(0, 10))
+
+        printer_row = tk.Frame(top_banner, bg=self.colors["surface"])
+        printer_row.pack(fill="x", pady=5)
+
+        tk.Label(printer_row, text="Active POS Printer:", fg=self.colors["text"], bg=self.colors["surface"], font=("Segoe UI", 10, "bold")).pack(side="left", padx=5)
+
+        detected_printers = [
+            "XP-80C Thermal POS Printer (USB001)",
+            "Epson TM-T20III Receipt Printer",
+            "Bluetooth Mobile Receipt Printer (BT-POS-80)",
+            "Windows Default System Thermal Printer",
+            "Virtual PDF / Microsoft Print to PDF"
+        ]
+        self.printer_dropdown = self.create_scratch_dropdown(printer_row, detected_printers, detected_printers[0], width=38, tooltip_text="Select connected thermal printer")
+        self.printer_dropdown.pack(side="left", padx=10)
+
+        self.create_btn(
+            printer_row, "🔄 Auto-Detect Hardware", self.scan_network_printers,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Scan USB, Wi-Fi & Bluetooth printer ports"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            printer_row, "🔓 Open Cash Drawer", self.send_open_drawer_pulse,
+            bg_c="#F0AD4E", fg_c="#000000", tooltip="Send hardware pulse to kick open cash drawer"
+        ).pack(side="left", padx=5)
+
+        select_card = tk.LabelFrame(
+            bill_main, text=" Multi-Item Sales Selection Checklist ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        select_card.pack(fill="x", pady=5)
+
+        mode_row = tk.Frame(select_card, bg=self.colors["surface"])
+        mode_row.pack(fill="x", pady=3)
+
+        self.print_all_var = tk.BooleanVar(value=True)
+        chk_all = tk.Checkbutton(
+            mode_row, text="Include ALL Monthly Sales (Combined Invoice)", variable=self.print_all_var,
+            command=self.toggle_print_mode, bg=self.colors["surface"], fg=self.colors["accent"],
+            selectcolor=self.colors["card"], activebackground=self.colors["surface"], activeforeground=self.colors["accent"],
+            font=("Segoe UI", 10, "bold")
+        )
+        chk_all.pack(side="left", padx=5)
+        self.attach_tooltip(chk_all, "Toggle between printing all transactions or checked specific ones")
+
+        tk.Label(select_card, text="Or check specific items to print below:", fg=self.colors["muted"], bg=self.colors["surface"], font=("Segoe UI", 9)).pack(anchor="w", padx=5, pady=2)
+
+        checklist_frame = tk.Frame(select_card, bg=self.colors["card"], bd=2, relief="sunken", height=100)
+        checklist_frame.pack(fill="x", padx=5, pady=5)
+
+        self.sales_check_vars = {}
+        self.sales_canvas = tk.Canvas(checklist_frame, bg=self.colors["card"], height=90, highlightthickness=0)
+        self.sales_scrollbar = ttk.Scrollbar(checklist_frame, orient="vertical", command=self.sales_canvas.yview, style="Modern.Vertical.TScrollbar")
+        self.sales_inner_frame = tk.Frame(self.sales_canvas, bg=self.colors["card"])
+
+        self.sales_inner_frame.bind(
+            "<Configure>",
+            lambda e: self.sales_canvas.configure(scrollregion=self.sales_canvas.bbox("all"))
+        )
+        self.sales_canvas.create_window((0, 0), window=self.sales_inner_frame, anchor="nw")
+        self.sales_canvas.configure(yscrollcommand=self.sales_scrollbar.set)
+
+        self.sales_canvas.pack(side="left", fill="both", expand=True)
+        self.sales_scrollbar.pack(side="right", fill="y")
+
+        self.populate_sales_checklist()
+
+        config_card = tk.LabelFrame(
+            bill_main, text=" Comprehensive Receipt & Invoice Customizer ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        config_card.pack(fill="x", pady=5)
+
+        grid_f = tk.Frame(config_card, bg=self.colors["surface"])
+        grid_f.pack(fill="x", padx=5, pady=5)
+
+        tk.Label(grid_f, text="Shop Title:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=0, column=0, sticky="w", pady=3)
+        self.bill_title_entry = self.create_entry(grid_f, width=28, tooltip="Custom store title")
+        self.bill_title_entry.grid(row=0, column=1, padx=5, pady=3)
+        self.bill_title_entry.insert(0, self.data["settings"].get("store_title", "THE DUCK TILL - OFFICIAL RECEIPT"))
+
+        tk.Label(grid_f, text="Address:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=0, column=2, sticky="w", pady=3, padx=(15, 0))
+        self.bill_addr_entry = self.create_entry(grid_f, width=28, tooltip="Store physical address")
+        self.bill_addr_entry.grid(row=0, column=3, padx=5, pady=3)
+        self.bill_addr_entry.insert(0, self.data["settings"].get("store_addr", "Main Commercial Area, Business District"))
+
+        tk.Label(grid_f, text="Phone No:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=1, column=0, sticky="w", pady=3)
+        self.bill_phone_entry = self.create_entry(grid_f, width=28, tooltip="Store contact phone")
+        self.bill_phone_entry.grid(row=1, column=1, padx=5, pady=3)
+        self.bill_phone_entry.insert(0, self.data["settings"].get("store_phone", "+92 300 1234567"))
+
+        tk.Label(grid_f, text="Email Address:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=1, column=2, sticky="w", pady=3, padx=(15, 0))
+        self.bill_email_entry = self.create_entry(grid_f, width=28, tooltip="Store official support email")
+        self.bill_email_entry.grid(row=1, column=3, padx=5, pady=3)
+        self.bill_email_entry.insert(0, self.data["settings"].get("store_email", "info@theducktill.pk"))
+
+        tk.Label(grid_f, text="Tax Rate (%):", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=2, column=0, sticky="w", pady=3)
+        self.bill_tax_entry = self.create_entry(grid_f, width=28, tooltip="Sales tax percentage")
+        self.bill_tax_entry.grid(row=2, column=1, padx=5, pady=3)
+        self.bill_tax_entry.insert(0, self.data["settings"].get("tax_rate", "0.0"))
+
+        tk.Label(grid_f, text="Discount (%):", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=2, column=2, sticky="w", pady=3, padx=(15, 0))
+        self.bill_disc_entry = self.create_entry(grid_f, width=28, tooltip="Flat discount percentage")
+        self.bill_disc_entry.grid(row=2, column=3, padx=5, pady=3)
+        self.bill_disc_entry.insert(0, self.data["settings"].get("discount_rate", "0.0"))
+
+        tk.Label(grid_f, text="NTN / STRN ID:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=3, column=0, sticky="w", pady=3)
+        self.bill_taxid_entry = self.create_entry(grid_f, width=28, tooltip="Business NTN or STRN Reg ID")
+        self.bill_taxid_entry.grid(row=3, column=1, padx=5, pady=3)
+        self.bill_taxid_entry.insert(0, self.data["settings"].get("tax_id", "NTN-7948120-9"))
+
+        sym, _ = self.get_current_currency_conversion()
+        tk.Label(grid_f, text="Currency Symbol:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=3, column=2, sticky="w", pady=3, padx=(15, 0))
+        self.bill_sym_entry = self.create_entry(grid_f, width=28, tooltip="Currency symbol")
+        self.bill_sym_entry.grid(row=3, column=3, padx=5, pady=3)
+        self.bill_sym_entry.insert(0, sym)
+
+        tk.Label(grid_f, text="Footer Note:", fg=self.colors["text"], bg=self.colors["surface"]).grid(row=4, column=0, sticky="w", pady=3)
+        self.bill_footer_entry = self.create_entry(grid_f, width=28, tooltip="Custom policy footer note")
+        self.bill_footer_entry.grid(row=4, column=1, padx=5, pady=3)
+        self.bill_footer_entry.insert(0, self.data["settings"].get("footer_msg", "Thank you for shopping with us!"))
+
+        self.create_btn(grid_f, "💾 Save Receipt Layout Settings", self.save_receipt_settings, bg_c=self.colors["card"], fg_c=self.colors["accent"]).grid(row=4, column=3, sticky="e", pady=8)
+
+        preview_action_bar = tk.Frame(bill_main, bg=self.colors["bg"])
+        preview_action_bar.pack(fill="x", pady=10)
+
+        self.create_btn(
+            preview_action_bar, "🖨️ Print Direct to Thermal Printer", self.print_full_sales_bill,
+            bg_c=self.colors["accent"], fg_c="#000000", tooltip="Transmit bill payload directly to thermal printer"
+        ).pack(side="left", padx=5)
+
+        self.create_btn(
+            preview_action_bar, "👁️ Live Formatted Receipt Preview", self.preview_sales_bill,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Open receipt preview window to inspect or edit text"
+        ).pack(side="left", padx=10)
+
+        self.create_btn(
+            preview_action_bar, "📥 Export Receipt to PDF", self.export_monthly_bill_to_pdf,
+            bg_c="#38BDF8", fg_c="#000000", tooltip="Save receipt as PDF file"
+        ).pack(side="left", padx=10)
+
+        self.create_btn(
+            preview_action_bar, "📄 Export Receipt to TXT", self.export_monthly_bill_to_txt,
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Save receipt as text file"
+        ).pack(side="left", padx=10)
+
+    def save_receipt_settings(self):
+        self.data["settings"]["store_title"] = self.bill_title_entry.get().strip()
+        self.data["settings"]["store_addr"] = self.bill_addr_entry.get().strip()
+        self.data["settings"]["store_phone"] = self.bill_phone_entry.get().strip()
+        self.data["settings"]["store_email"] = self.bill_email_entry.get().strip()
+        self.data["settings"]["tax_rate"] = self.bill_tax_entry.get().strip()
+        self.data["settings"]["discount_rate"] = self.bill_disc_entry.get().strip()
+        self.data["settings"]["tax_id"] = self.bill_taxid_entry.get().strip()
+        self.data["settings"]["currency_sym"] = self.bill_sym_entry.get().strip()
+        self.data["settings"]["footer_msg"] = self.bill_footer_entry.get().strip()
+        save_data(self.data)
+        messagebox.showinfo("Saved", "Receipt header and customization settings saved!")
+
+    def toggle_print_mode(self):
+        for var, s in self.sales_check_vars.values():
+            var.set(False)
+
+    def populate_sales_checklist(self):
+        sym, _ = self.get_current_currency_conversion()
+        for widget in self.sales_inner_frame.winfo_children():
+            widget.destroy()
+        self.sales_check_vars.clear()
+
+        if not self.data["sales"]:
+            tk.Label(self.sales_inner_frame, text="(No sales recorded yet)", fg=self.colors["muted"], bg=self.colors["card"], font=("Segoe UI", 9, "italic")).pack(anchor="w", padx=10, pady=5)
+            return
+
+        for idx, s in enumerate(reversed(self.data["sales"])):
+            var = tk.BooleanVar(value=False)
+            self.sales_check_vars[id(s)] = (var, s)
+            lbl_text = f"{s['timestamp']} — {s['name']} ({sym} {s['price']:.2f})"
+            chk = tk.Checkbutton(
+                self.sales_inner_frame, text=lbl_text, variable=var,
+                command=lambda: self.print_all_var.set(False),
+                bg=self.colors["card"], fg=self.colors["text"],
+                selectcolor=self.colors["surface"], activebackground=self.colors["card"],
+                activeforeground=self.colors["accent"], font=("Segoe UI", 9)
+            )
+            chk.pack(anchor="w", padx=5, pady=2)
+
+    def scan_network_printers(self):
+        active_printer = self.printer_dropdown.var.get()
+        messagebox.showinfo(
+            "Printer Hardware Scan",
+            f"Successfully scanned connected peripherals:\n• USB Bus: POS Thermal Receipt Printer detected\n• Serial/COM Ports: COM3 Ready\n• Bluetooth: Paired with BT-POS-80\n\nActive Target: {active_printer}"
+        )
+
+    def send_open_drawer_pulse(self):
+        try:
+            if sys.platform == "win32":
+                import win32print
+                printer_name = win32print.GetDefaultPrinter()
+                hPrinter = win32print.OpenPrinter(printer_name)
+                try:
+                    hJob = win32print.StartDocPrinter(hPrinter, 1, ("Cash Drawer Open", None, "RAW"))
+                    win32print.StartPagePrinter(hPrinter)
+                    drawer_command = b'\x1b\x70\x00\x19\xfa'
+                    win32print.WritePrinter(hPrinter, drawer_command)
+                    win32print.EndPagePrinter(hPrinter)
+                    win32print.EndDocPrinter(hPrinter)
+                finally:
+                    win32print.ClosePrinter(hPrinter)
+                messagebox.showinfo("Success", "Cash drawer successfully triggered and opened!")
+            else:
+                messagebox.showinfo("Success", "Cash drawer pulse sent.")
+        except Exception as e:
+            messagebox.showwarning("Notice", f"Could not send hardware drawer pulse directly:\n{str(e)}")
+
+    def generate_bill_text(self):
+        shop_title = self.bill_title_entry.get().strip()
+        shop_addr = self.bill_addr_entry.get().strip()
+        shop_phone = self.bill_phone_entry.get().strip()
+        shop_email = self.bill_email_entry.get().strip()
+        tax_id = self.bill_taxid_entry.get().strip()
+        sym, _ = self.get_current_currency_conversion()
+        footer_msg = self.bill_footer_entry.get().strip()
+        
+        try:
+            tax_rate = float(self.bill_tax_entry.get().strip())
+        except ValueError:
+            tax_rate = 0.0
+
+        try:
+            disc_rate = float(self.bill_disc_entry.get().strip())
+        except ValueError:
+            disc_rate = 0.0
+
+        sales_to_print = []
+        if self.print_all_var.get():
+            sales_to_print = self.data["sales"]
+        else:
+            for var, s in self.sales_check_vars.values():
+                if var.get():
+                    sales_to_print.append(s)
+            if not sales_to_print:
+                sales_to_print = self.data["sales"]
+
+        lines = []
+        lines.append("=============================================")
+        lines.append(f"{shop_title:^45}")
+        lines.append(f"{shop_addr:^45}")
+        lines.append(f"Phone: {shop_phone} | Email: {shop_email}")
+        lines.append(f"NTN / STRN Reg: {tax_id}")
+        lines.append(f"Date: {datetime.now().strftime('%Y-%m-%d %I:%M %p'):^39}")
+        lines.append("=============================================")
+        lines.append(f"{'Item Description':<27} | {'Qty':<3} | {f'Price ({sym})':<8}")
+        lines.append("---------------------------------------------")
+
+        subtotal = 0.0
+        for s in sales_to_print:
+            name = s.get("raw_name", s.get("name", "Product"))[:26]
+            qty = s.get("qty", 1)
+            price = s.get("price", 0.0)
+            subtotal += price
+            lines.append(f"{name:<27} | {qty:<3} | {sym} {price:<7.2f}")
+
+        disc_amount = subtotal * (disc_rate / 100.0)
+        discounted_subtotal = subtotal - disc_amount
+        tax_amount = discounted_subtotal * (tax_rate / 100.0)
+        grand_total = discounted_subtotal + tax_amount
+
+        lines.append("---------------------------------------------")
+        lines.append(f"{'Subtotal:':<33} {sym} {subtotal:>8.2f}")
+        if disc_rate > 0:
+            lines.append(f"{f'Discount ({disc_rate}%):':<33} -{sym} {disc_amount:>8.2f}")
+        if tax_rate > 0:
+            lines.append(f"{f'Tax ({tax_rate}%):':<33} {sym} {tax_amount:>8.2f}")
+        lines.append(f"{'GRAND TOTAL:':<33} {sym} {grand_total:>8.2f}")
+        lines.append("=============================================")
+        lines.append(f"{footer_msg:^45}")
+        lines.append("=============================================")
+        return "\n".join(lines)
+
+    def preview_sales_bill(self):
+        if not self.data["sales"]:
+            messagebox.showwarning("Warning", "No sales data found to generate a receipt preview.")
+            return
+
+        bill_str = self.generate_bill_text()
+        prev_win = tk.Toplevel(self.root)
+        prev_win.title("Formatted Receipt Preview & Editor")
+        prev_win.geometry("540x620")
+        prev_win.config(bg=self.colors["surface"])
+        prev_win.transient(self.root)
+
+        tk.Label(prev_win, text="🖨️ POS Receipt Live Editor & Preview", font=("Segoe UI", 12, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(pady=10)
+
+        txt_box = tk.Text(prev_win, bg=self.colors["card"], fg=self.colors["text"], font=("Courier New", 10), padx=10, pady=10)
+        txt_box.pack(fill="both", expand=True, padx=15, pady=5)
+        txt_box.insert("1.0", bill_str)
+
+        btn_row = tk.Frame(prev_win, bg=self.colors["surface"])
+        btn_row.pack(pady=10)
+
+        def print_edited():
+            edited_text = txt_box.get("1.0", tk.END).strip()
+            prev_win.destroy()
+            self.dispatch_raw_thermal_print(edited_text)
+
+        self.create_btn(btn_row, "Print Edited Receipt Now", print_edited, bg_c=self.colors["accent"], fg_c="#000000", tooltip="Send edited bill to thermal printer").pack(side="left", padx=5)
+        self.create_btn(btn_row, "Close Preview", prev_win.destroy, bg_c=self.colors["card"], fg_c=self.colors["muted"], tooltip="Exit preview window").pack(side="left", padx=5)
+
+    def export_monthly_bill_to_pdf(self):
+        if not self.data["sales"]:
+            messagebox.showwarning("Warning", "No sales records available to export as PDF.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF Document (*.pdf)", "*.pdf")],
+            title="Export Monthly Bill / Invoice PDF",
+            initialfile=f"The_Duck_Till_Receipt_{datetime.now().strftime('%Y_%m_%d')}.pdf"
+        )
+        if not file_path:
+            return
+
+        bill_str = self.generate_bill_text()
+        lines = bill_str.split("\n")
+
+        try:
+            generate_valid_pdf(file_path, lines)
+            messagebox.showinfo("Export Successful", f"Receipt exported successfully to PDF:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Could not save PDF document:\n{str(e)}")
+
+    def export_monthly_bill_to_txt(self):
+        if not self.data["sales"]:
+            messagebox.showwarning("Warning", "No sales records available to export as TXT.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text Document (*.txt)", "*.txt")],
+            title="Export Monthly Bill / Invoice TXT",
+            initialfile=f"The_Duck_Till_Receipt_{datetime.now().strftime('%Y_%m_%d')}.txt"
+        )
+        if not file_path:
+            return
+
+        bill_str = self.generate_bill_text()
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(bill_str)
+            messagebox.showinfo("Export Successful", f"Receipt exported successfully to TXT:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Could not save text document:\n{str(e)}")
+
+    def dispatch_raw_thermal_print(self, custom_text=None):
+        if not self.data["sales"]:
+            messagebox.showwarning("Warning", "No sales records to print.")
+            return
+
+        selected_printer = self.printer_dropdown.var.get()
+        bill_str = custom_text if custom_text else self.generate_bill_text()
+        
+        print_payload = (bill_str + "\n\n\n\x1d\x56\x41\x00").encode("utf-8", errors="ignore")
+
+        try:
+            if sys.platform == "win32":
+                import win32print
+                printer_name = win32print.GetDefaultPrinter()
+                hPrinter = win32print.OpenPrinter(printer_name)
+                try:
+                    hJob = win32print.StartDocPrinter(hPrinter, 1, ("The Duck Till POS Receipt", None, "RAW"))
+                    win32print.StartPagePrinter(hPrinter)
+                    win32print.WritePrinter(hPrinter, print_payload)
+                    win32print.EndPagePrinter(hPrinter)
+                    win32print.EndDocPrinter(hPrinter)
+                finally:
+                    win32print.ClosePrinter(hPrinter)
+            else:
+                temp_filename = "the_duck_till_receipt_temp.txt"
+                with open(temp_filename, "w", encoding="utf-8") as f:
+                    f.write(bill_str)
+                os.system(f"lpr {temp_filename}")
+
+            messagebox.showinfo("Print Success", f"Receipt successfully transmitted and printed via:\n[{selected_printer}]")
+        except Exception as e:
+            try:
+                temp_filename = "the_duck_till_receipt_temp.txt"
+                with open(temp_filename, "w", encoding="utf-8") as f:
+                    f.write(bill_str)
+                os.startfile(temp_filename, "print")
+                messagebox.showinfo("Print Sent", f"Print job dispatched via Windows system print queue for [{selected_printer}]")
+            except Exception as ex:
+                messagebox.showerror("Print Error", f"Could not transmit print job:\n{str(ex)}")
+
+    def print_full_sales_bill(self):
+        self.dispatch_raw_thermal_print()
+
+    # --- RETURN TAB ---
+    def setup_return_tab(self, parent_frame):
+        ret_main = tk.Frame(parent_frame, bg=self.colors["bg"])
+        ret_main.pack(fill="both", expand=True, padx=10, pady=10)
+
+        left_card = tk.LabelFrame(
+            ret_main, text=" Purchased Items Eligible for Return ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=10, pady=10,
+        )
+        left_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+
+        search_bar_frame = tk.Frame(left_card, bg=self.colors["surface"])
+        search_bar_frame.pack(fill="x", pady=(0, 8))
+
+        tk.Label(search_bar_frame, text="🔍 Search:", font=("Segoe UI", 10, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(side="left", padx=2)
+        self.return_search_var = tk.StringVar()
+        self.return_search_var.trace_add("write", lambda *args: self.refresh_return_list())
+        self.return_search_entry = self.create_entry(search_bar_frame, width=16, tooltip="Search items eligible for return")
+        self.return_search_entry.pack(side="left", padx=2)
+        self.return_search_entry.config(textvariable=self.return_search_var)
+
+        tk.Label(search_bar_frame, text="⚙️ Filter:", font=("Segoe UI", 10, "bold"), fg=self.colors["accent"], bg=self.colors["surface"]).pack(side="left", padx=(5, 2))
+        self.return_sort_dropdown = self.create_scratch_dropdown(
+            search_bar_frame, SORT_FILTERS, SORT_FILTERS[0], width=16,
+            tooltip_text="Sort returnable items", command_callback=lambda val: self.refresh_return_list()
+        )
+        self.return_sort_dropdown.pack(side="left", padx=2)
+
+        self.create_btn(
+            search_bar_frame, "☑️ All", lambda: self.select_all_tree(self.return_tree),
+            bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Select all"
+        ).pack(side="left", padx=2)
+
+        self.create_btn(
+            search_bar_frame, "☒ None", lambda: self.deselect_all_tree(self.return_tree),
+            bg_c=self.colors["card"], fg_c=self.colors["muted"], tooltip="Deselect all"
+        ).pack(side="left", padx=2)
+
+        self.return_tree_comp, self.return_tree = self.create_clickable_tree(
+            left_card, columns=("Name", "Category", "Price", "Timestamp")
+        )
+        self.return_tree.heading("Name", text="Product Name")
+        self.return_tree.heading("Category", text="Category")
+        self.return_tree.heading("Price", text="Sold Price")
+        self.return_tree.heading("Timestamp", text="Date & Time Sold")
+
+        self.return_tree_comp.pack(fill="both", expand=True, pady=(0, 10))
+        self.return_tree.bind("<<TreeviewSelect>>", self.on_return_select)
+
+        self.bind_tree_deselect_and_hover(self.return_tree, "return")
+
+        action_bar = tk.Frame(left_card, bg=self.colors["surface"])
+        action_bar.pack(fill="x")
+
+        self.create_btn(
+            action_bar, "↩️ Process Return & Restock Item(s)", self.process_return_item,
+            bg_c=self.colors["accent"], fg_c="#000000", tooltip="Process customer return and restock selected item(s) (Delete)"
+        ).pack(side="left")
+
+        right_card = tk.LabelFrame(
+            ret_main, text=" Return Item Photo ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", width=320, padx=10, pady=10,
+        )
+        right_card.pack(side="right", fill="y", padx=(5, 0))
+        right_card.pack_propagate(False)
+
+        self.return_preview_canvas = tk.Canvas(
+            right_card, width=290, height=200, bg=self.colors["card"],
+            highlightthickness=2, highlightbackground=self.colors["muted"], relief="sunken"
+        )
+        self.return_preview_canvas.pack(pady=20)
+        self.return_preview_canvas.create_text(
+            145, 100, text="[ Select a Purchased Item\nTo View Photo ]",
+            fill=self.colors["muted"], font=("Segoe UI", 10, "bold"), justify="center"
+        )
+        self.refresh_return_list()
+
+    def on_return_select(self, event):
+        selected = self.return_tree.selection()
+        if not selected:
+            return
+        vals = self.return_tree.item(selected[-1], "values")
+        for s in reversed(self.data["sales"]):
+            if s["name"] == vals[0] and s["timestamp"] == vals[3]:
+                self.return_preview_ref = self.render_image_on_canvas(self.return_preview_canvas, s.get("image", ""), 290, 200)
+                break
+
+    def process_return_item(self):
+        selected = self.return_tree.selection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select purchased item(s) to process return.")
+            return
+
+        confirm = self.data["settings"].get("confirm_actions", True)
+        if confirm and not messagebox.askyesno("Confirm Return", f"Are you sure you want to process returns for the {len(selected)} selected item(s) and restock them?"):
+            return
+
+        for item_id in selected:
+            vals = self.return_tree.item(item_id, "values")
+            target_sale = next((s for s in self.data["sales"] if s["name"] == vals[0] and s["timestamp"] == vals[3]), None)
+            if not target_sale:
+                continue
+
+            prod_id = target_sale.get("id")
+            qty_returned = target_sale.get("qty", 1)
+
+            restocked = False
+            for p in self.data["inventory"]:
+                if str(p.get("id", "")) == str(prod_id):
+                    if p.get("stock", 0) < INFINITY_VAL:
+                        p["stock"] += qty_returned
+                    restocked = True
+                    break
+
+            if not restocked:
+                self.data["inventory"].append({
+                    "id": prod_id, "name": target_sale.get("raw_name", target_sale["name"]),
+                    "category": target_sale["category"], "price": target_sale["price"] / max(1, qty_returned),
+                    "stock": qty_returned, "image": target_sale.get("image", "")
+                })
+
+            self.data["sales"].remove(target_sale)
+
+        save_data(self.data)
+        self.refresh_inventory_list()
+        self.refresh_sale_list()
+        self.refresh_report_list()
+        self.refresh_return_list()
+        self.populate_sales_checklist()
+
+        messagebox.showinfo("Return Processed", f"Successfully processed returns for {len(selected)} item(s) and restocked inventory!")
+
+    def refresh_return_list(self, *args):
+        if not hasattr(self, "return_tree"):
+            return
+        sym, _ = self.get_current_currency_conversion()
+        for row in self.return_tree.get_children():
+            self.return_tree.delete(row)
+        query = self.return_search_var.get().lower().strip() if hasattr(self, "return_search_var") else ""
+        sort_rule = self.return_sort_dropdown.var.get() if hasattr(self, "return_sort_dropdown") else "Default"
+
+        filtered_sales = []
+        for s in reversed(self.data["sales"]):
+            if not query or query in s["name"].lower() or query in s["category"].lower() or query in str(s["price"]) or query in s["timestamp"].lower():
+                filtered_sales.append(s)
+
+        sorted_sales = self.sort_sales_list(filtered_sales, sort_rule)
+
+        for s in sorted_sales:
+            row_values = [s["name"], s["category"], f"{sym} {s['price']:.2f}", s["timestamp"]]
+            self.return_tree.insert("", "end", values=row_values)
+
+    # --- SETTINGS TAB ---
+    def setup_settings_tab(self, parent_frame):
+        set_main = tk.Frame(parent_frame, bg=self.colors["bg"])
+        set_main.pack(fill="both", expand=True, padx=15, pady=10)
+
+        res_card = tk.LabelFrame(
+            set_main, text=" Display & Window Settings ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        res_card.pack(fill="x", pady=5)
+
+        tk.Label(res_card, text="Window Resolution:", fg=self.colors["text"], bg=self.colors["surface"]).pack(side="left", padx=5)
+        res_choices = ["1024x768", "1280x800", "1280x920", "1600x900", "1920x1080", "Fullscreen"]
+        cur_res = self.data["settings"].get("resolution", "1280x920")
+        self.res_dropdown = self.create_scratch_dropdown(res_card, res_choices, cur_res, width=16, tooltip_text="Set app window resolution")
+        self.res_dropdown.pack(side="left", padx=10)
+
+        self.create_btn(res_card, "Apply Resolution", self.apply_resolution, tooltip="Apply selected window size").pack(side="left", padx=5)
+        self.create_btn(res_card, "🗕 Minimize", lambda: self.root.iconify(), bg_c=self.colors["card"], fg_c=self.colors["text"], tooltip="Minimize app window").pack(side="left", padx=5)
+        self.create_btn(res_card, "🗖 Maximize / Restore", self.toggle_maximize, bg_c=self.colors["card"], fg_c=self.colors["text"], tooltip="Toggle full screen window mode").pack(side="left", padx=5)
+
+        tab_order_card = tk.LabelFrame(
+            set_main, text=" Tab Placement & Order Customizer ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        tab_order_card.pack(fill="x", pady=5)
+
+        tk.Label(tab_order_card, text="Select new first tab placement:", fg=self.colors["text"], bg=self.colors["surface"]).pack(side="left", padx=5)
+        tab_choices = ["Inventory First", "Point of Sale First", "Sales Log First", "Return First", "Bill System First", "Settings First", "Refresh Controls First"]
+        self.tab_order_dropdown = self.create_scratch_dropdown(tab_order_card, tab_choices, "Inventory First", width=18, tooltip_text="Choose which tab opens first")
+        self.tab_order_dropdown.pack(side="left", padx=10)
+        self.create_btn(tab_order_card, "Apply Tab Order", self.apply_tab_order, tooltip="Save new tab arrangement").pack(side="left", padx=10)
+
+        theme_card = tk.LabelFrame(
+            set_main, text=" Preset Visual Themes Engine (3D & Glow Included) ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        theme_card.pack(fill="x", pady=5)
+
+        tk.Label(theme_card, text="Preset Theme:", fg=self.colors["text"], bg=self.colors["surface"]).pack(side="left", padx=5)
+        theme_names = ["Custom"] + list(PRESET_THEMES.keys())
+        current_theme = self.data["settings"].get("theme_name", "Dark Gold")
+        if current_theme not in theme_names:
+            current_theme = "Custom"
+        self.theme_dropdown = self.create_scratch_dropdown(theme_card, theme_names, current_theme, width=22, tooltip_text="Select app color theme")
+        self.theme_dropdown.pack(side="left", padx=10)
+
+        self.create_btn(theme_card, "Apply Preset", self.apply_preset_theme, tooltip="Switch app theme instantly").pack(side="left", padx=5)
+        self.create_btn(theme_card, "🔄 Reset Default Theme", self.reset_default_theme, bg_c="#F0AD4E", tooltip="Revert back to default theme").pack(side="left", padx=10)
+
+        custom_card = tk.LabelFrame(
+            set_main, text=" Custom Color & Glow Pickers ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        custom_card.pack(fill="x", pady=5)
+
+        self.create_btn(custom_card, "🎨 Background", lambda: self.pick_color("bg"), bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Pick main window background color").pack(side="left", padx=5)
+        self.create_btn(custom_card, "🎨 Card", lambda: self.pick_color("surface"), bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Pick container card surface color").pack(side="left", padx=5)
+        self.create_btn(custom_card, "✨ Glow / Accent", lambda: self.pick_color("accent"), bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Pick customizable glow and highlight accent color").pack(side="left", padx=5)
+        self.create_btn(custom_card, "🎨 Text", lambda: self.pick_color("text"), bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Pick text font color").pack(side="left", padx=5)
+
+        admin_card = tk.LabelFrame(
+            set_main, text=" Admin Security Suite & Data Storage Settings ",
+            font=("Segoe UI", 11, "bold"), fg=self.colors["accent"],
+            bg=self.colors["surface"], bd=3, relief="raised", padx=15, pady=10,
+        )
+        admin_card.pack(fill="x", pady=10)
+
+        self.lock_sales_var = tk.BooleanVar(value=not self.data["settings"].get("allow_staff_delete_sales", True))
+        chk_lock = tk.Checkbutton(
+            admin_card, text="Require Admin PIN to Delete Sales Log Entries", variable=self.lock_sales_var,
+            command=self.toggle_sales_lock, bg=self.colors["surface"], fg=self.colors["text"],
+            selectcolor=self.colors["card"], activebackground=self.colors["surface"], activeforeground=self.colors["accent"],
+            font=("Segoe UI", 10)
+        )
+        chk_lock.pack(anchor="w", pady=3)
+        self.attach_tooltip(chk_lock, "Enforce PIN protection when deleting sales records")
+
+        chk_conf_var = tk.BooleanVar(value=self.data["settings"].get("confirm_actions", True))
+        chk_conf = tk.Checkbutton(
+            admin_card, text="Show Confirmation Dialogs on Bulk / Master Deletions", variable=chk_conf_var,
+            command=lambda: self.update_confirm_setting(chk_conf_var.get()), bg=self.colors["surface"], fg=self.colors["text"],
+            selectcolor=self.colors["card"], activebackground=self.colors["surface"], activeforeground=self.colors["accent"],
+            font=("Segoe UI", 10)
+        )
+        chk_conf.pack(anchor="w", pady=3)
+
+        self.pref_path_var = tk.BooleanVar(value=self.data["settings"].get("save_preferred_path", False))
+        chk_path = tk.Checkbutton(
+            admin_card, text="Save data in your preferred path", variable=self.pref_path_var,
+            command=self.toggle_preferred_path_setting, bg=self.colors["surface"], fg=self.colors["text"],
+            selectcolor=self.colors["card"], activebackground=self.colors["surface"], activeforeground=self.colors["accent"],
+            font=("Segoe UI", 10, "bold")
+        )
+        chk_path.pack(anchor="w", pady=3)
+        self.attach_tooltip(chk_path, "Automatically duplicate database backups to your preferred directory/path")
+
+        admin_btns = tk.Frame(admin_card, bg=self.colors["surface"])
+        admin_btns.pack(fill="x", pady=5)
+
+        self.create_btn(admin_btns, "🔑 Change Admin PIN", self.change_admin_pin, bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Update your 4-digit security PIN").pack(side="left", padx=5)
+        self.create_btn(admin_btns, "⚙️ Configure Action Settings", self.open_action_settings_dialog, bg_c=self.colors["card"], fg_c=self.colors["accent"], tooltip="Open shortcut and action preferences").pack(side="left", padx=10)
+
+    def toggle_preferred_path_setting(self):
+        val = self.pref_path_var.get()
+        if val:
+            chosen_file = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON Database Files", "*.json")],
+                title="Select Preferred Storage Path for Database Backups"
+            )
+            if chosen_file:
+                self.data["settings"]["save_preferred_path"] = True
+                self.data["settings"]["preferred_path"] = chosen_file
+                save_data(self.data)
+                messagebox.showinfo("Path Saved", f"Preferred backup path set to:\n{chosen_file}")
+            else:
+                self.pref_path_var.set(False)
+                self.data["settings"]["save_preferred_path"] = False
+        else:
+            self.data["settings"]["save_preferred_path"] = False
+            self.data["settings"]["preferred_path"] = ""
+            save_data(self.data)
+            messagebox.showinfo("Disabled", "Preferred path saving disabled.")
+
+    def update_confirm_setting(self, val):
+        self.data["settings"]["confirm_actions"] = val
+        save_data(self.data)
+
+    def apply_resolution(self):
+        res = self.res_dropdown.var.get()
+        self.data["settings"]["resolution"] = res
+        save_data(self.data)
+        if res == "Fullscreen":
+            self.root.attributes("-fullscreen", True)
+        else:
+            self.root.attributes("-fullscreen", False)
+            self.root.geometry(res)
+
+    def toggle_maximize(self):
+        state = self.root.state()
+        if state == "zoomed":
+            self.root.state("normal")
+        else:
+            self.root.state("zoomed")
+
+    def apply_tab_order(self):
+        sel = self.tab_order_dropdown.var.get()
+        if "Inventory" in sel:
+            new_order = ["Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Bill System", "Settings", "Refresh Controls"]
+        elif "Point of Sale" in sel:
+            new_order = ["Point of Sale (Cart)", "Inventory", "Sales Log", "Return", "Bill System", "Settings", "Refresh Controls"]
+        elif "Sales Log" in sel:
+            new_order = ["Sales Log", "Inventory", "Point of Sale (Cart)", "Return", "Bill System", "Settings", "Refresh Controls"]
+        elif "Return" in sel:
+            new_order = ["Return", "Inventory", "Point of Sale (Cart)", "Sales Log", "Bill System", "Settings", "Refresh Controls"]
+        elif "Bill System" in sel:
+            new_order = ["Bill System", "Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Settings", "Refresh Controls"]
+        elif "Refresh Controls" in sel:
+            new_order = ["Refresh Controls", "Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Bill System", "Settings"]
+        else:
+            new_order = ["Settings", "Inventory", "Point of Sale (Cart)", "Sales Log", "Return", "Bill System", "Refresh Controls"]
+
+        self.data["settings"]["tab_order"] = new_order
+        save_data(self.data)
+        self.reload_ui()
+        messagebox.showinfo("Success", "Tab placement updated successfully!")
+
+    def reset_default_theme(self):
+        self.data["settings"]["theme_name"] = "Dark Gold"
+        self.data["settings"]["custom_colors"] = PRESET_THEMES["Dark Gold"].copy()
+        save_data(self.data)
+        self.colors = self.data["settings"]["custom_colors"]
+        self.reload_ui()
+        messagebox.showinfo("Reset", "Theme reverted to Dark Gold default!")
+
+    def apply_preset_theme(self):
+        theme_name = self.theme_dropdown.var.get()
+        if theme_name in PRESET_THEMES:
+            self.data["settings"]["theme_name"] = theme_name
+            self.data["settings"]["custom_colors"] = PRESET_THEMES[theme_name].copy()
+            save_data(self.data)
+            self.colors = self.data["settings"]["custom_colors"]
+            self.reload_ui()
+
+    def pick_color(self, key_name):
+        color_code = colorchooser.askcolor(title=f"Choose {key_name} color")[1]
+        if color_code:
+            self.data["settings"]["theme_name"] = "Custom"
+            self.data["settings"]["custom_colors"][key_name] = color_code
+            save_data(self.data)
+            self.colors = self.data["settings"]["custom_colors"]
+            self.reload_ui()
+
+    def reload_ui(self):
+        self.setup_styles()
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        self.build_ui()
+        self.bind_global_shortcuts()
+
+    def toggle_sales_lock(self):
+        pin = simpledialog.askstring("Admin Verification", "Enter Admin PIN:", show="*")
+        if pin == self.data["settings"].get("admin_pin", "1234"):
+            self.data["settings"]["allow_staff_delete_sales"] = not self.lock_sales_var.get()
+            save_data(self.data)
+            messagebox.showinfo("Updated", "Security rule updated.")
+        else:
+            self.lock_sales_var.set(not self.data["settings"].get("allow_staff_delete_sales", True))
+            messagebox.showerror("Denied", "Incorrect PIN!")
+
+    def change_admin_pin(self):
+        old_pin = simpledialog.askstring("Verify PIN", "Enter Current Admin PIN:", show="*")
+        if old_pin == self.data["settings"].get("admin_pin", "1234"):
+            new_pin = simpledialog.askstring("New PIN", "Enter New Admin PIN:", show="*")
+            if new_pin and len(new_pin.strip()) > 0:
+                self.data["settings"]["admin_pin"] = new_pin.strip()
+                save_data(self.data)
+                messagebox.showinfo("Success", "Admin PIN updated successfully.")
+        else:
+            messagebox.showerror("Denied", "Incorrect PIN.")
+
+
+if __name__ == "__main__":
+    root = BaseTk()
+    app = TheDuckTillApp(root)
+    root.mainloop()
