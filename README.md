@@ -14,7 +14,7 @@ running a small shop, testing an e-commerce side hustle, or just
 messing around with Python apps, I hope this helps you out!
 
 -------------------------------------------------------------
-##🛠️ HOW TO GET IT RUNNING
+## 🛠️ HOW TO GET IT RUNNING
 -------------------------------------------------------------
 
 1. Make sure Python is installed on your computer.
@@ -28,7 +28,7 @@ messing around with Python apps, I hope this helps you out!
    python the_duck_till.py
 
 -------------------------------------------------------------
-##💡 A FEW HELPFUL TIPS
+## 💡 A FEW HELPFUL TIPS
 -------------------------------------------------------------
 • Top-Right Currency Switcher: I built in 200+ world currencies so 
   you can switch to your local currency anytime without breaking prices.
@@ -38,7 +38,7 @@ messing around with Python apps, I hope this helps you out!
   address, and tax info so your receipts look official.
 
 -------------------------------------------------------------
-##⌨️ KEYBOARD SHORTCUTS
+## ⌨️ KEYBOARD SHORTCUTS
 -------------------------------------------------------------
 • Up / Down Arrows : Scroll through your items
 • Ctrl + A         : Select everything in a list
@@ -46,7 +46,7 @@ messing around with Python apps, I hope this helps you out!
 • Esc              : Exit the app
 
 -------------------------------------------------------------
-##❤️ IT'S OPEN SOURCE!
+## ❤️ IT'S OPEN SOURCE!
 -------------------------------------------------------------
 Since this project is open-source, you are 100% free to tweak the code, 
 add features, or hack it to fit your exact setup. If you find bugs 
